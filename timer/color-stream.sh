@@ -79,9 +79,9 @@ all_events=($(
 
 cd "$(dirname "$0")" || exit 1
 
-make exponential || exit 1
+make exponential-printer || exit 1
 
 for event in "${all_events[@]}"; do
   printf '%s\n' "$event"
   sleep "$progression"
-done | ./exponential
+done | ./exponential-printer

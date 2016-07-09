@@ -23,6 +23,8 @@ public:
   void start();
   void join();
 
+  ~action_timer();
+
 private:
   void thread_loop();
 

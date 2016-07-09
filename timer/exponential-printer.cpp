@@ -92,7 +92,7 @@ bool expand_escapes(std::string &escaped) {
 
 int main(int argc, char *argv[]) {
   action_timer actions;
-  actions.set_category("update", 1.0);
+  actions.set_category("check_for_updates", 1.0);
   actions.start();
 
   std::string input;
@@ -103,15 +103,18 @@ int main(int argc, char *argv[]) {
     double lambda = 0.0;
     if (sscanf(input.c_str(), "%lf:%256[\001-~]", &lambda, buffer) < 1) {
       fprintf(stderr, "%s: Failed to parse \"%s\".\n", argv[0], input.c_str());
-      return 1;
+      continue;
     }
-    std::string category(buffer);
-    if (!expand_escapes(category)) {
+    const std::string category(buffer);
+    std::string text(category);
+    if (!expand_escapes(text)) {
       fprintf(stderr, "%s: Failed to parse \"%s\".\n", argv[0], input.c_str());
-      return 1;
+      continue;
     }
     actions.set_category(category, lambda);
-    actions.set_action(category, action_timer::generic_action(new print_action(category)));
+    if (category != "check_for_updates") {
+      actions.set_action(category, action_timer::generic_action(lambda > 0 ? new print_action(text) : nullptr));
+    }
   }
 
   actions.join();

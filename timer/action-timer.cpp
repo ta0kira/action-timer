@@ -33,6 +33,12 @@ void action_timer::join() {
   }
 }
 
+action_timer::~action_timer() {
+  if (thread) {
+    thread->detach();
+  }
+}
+
 void action_timer::thread_loop() {
   while (true) {
     locked_exponential_categorical::read_proxy category_read = locked_categories.get_read();
