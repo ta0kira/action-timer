@@ -78,7 +78,12 @@ all_events=(
 process_input() {
   while :; do
     read -d '' -N 1 -s char
-    [ "$char" ] || char='\n'
+    if [ "$char" = $'\004' ]; then
+      break
+    fi
+    if [ -z "$char" ]; then
+      char='\n'
+    fi
     echo "0:$char"
   done
 }
