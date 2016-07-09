@@ -43,8 +43,9 @@ void action_timer::thread_loop() {
   while (true) {
     locked_exponential_categorical::read_proxy category_read = locked_categories.get_read();
     assert(category_read);
-    const std::string &category = category_read->uniform_to_category(uniform(generator));
-    const double       time     = category_read->uniform_to_time(uniform(generator));
+    // NOTE: Need to copy category to avoid a race condition!
+    const std::string category = category_read->uniform_to_category(uniform(generator));
+    const double       time    = category_read->uniform_to_time(uniform(generator));
     category_read.clear();
 
     timer.sleep_for(time);
