@@ -45,8 +45,8 @@ class thread_action {
 public:
   virtual void action() = 0;
 
-  void start();
-  void trigger_action();
+  virtual void start();
+  virtual void trigger_action();
 
   virtual ~thread_action();
 

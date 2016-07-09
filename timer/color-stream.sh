@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
 
 overall_scale=1
-progression=0.1
 
 formats_scale=50.0
 tokens_scale=500.0
@@ -70,18 +69,25 @@ explicit_scale() {
 formats=($(apply_scale "$formats_scale" "${formats[@]}"))
 tokens=($(explicit_scale "$tokens_scale" "${tokens[@]}"))
 
-all_events=($(
-  printf '%s\n' \
-    "${formats[@]}" "${tokens[@]}" \
-    "$(apply_scale "$newline_scale" '\n')" \
-    "$(apply_scale "$space_scale" ' ')" | sort -R
-))
+all_events=(
+  "${formats[@]}" "${tokens[@]}"
+  "$(apply_scale "$newline_scale" '\n')"
+  "$(apply_scale "$space_scale" ' ')"
+)
+
+process_input() {
+  while :; do
+    read -d '' -N 1 -s char
+    [ "$char" ] || char='\n'
+    echo "0:$char"
+  done
+}
 
 cd "$(dirname "$0")" || exit 1
 
 make exponential-printer || exit 1
 
-for event in "${all_events[@]}"; do
-  printf '%s\n' "$event"
-  sleep "$progression"
-done | ./exponential-printer
+{
+  printf '%s\n' "${all_events[@]}"
+  process_input
+} | ./exponential-printer
