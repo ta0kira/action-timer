@@ -116,6 +116,4 @@ int main(int argc, char *argv[]) {
       actions.set_action(category, action_timer::generic_action(lambda > 0 ? new print_action(text) : nullptr));
     }
   }
-
-  actions.join();
 }

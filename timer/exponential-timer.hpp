@@ -41,8 +41,17 @@ private:
   std::chrono::duration <double> base_time;
 };
 
-class thread_action {
+class abstract_action {
 public:
+  virtual void start() = 0;
+  virtual void trigger_action() = 0;
+  virtual ~abstract_action() = default;
+};
+
+class thread_action : public abstract_action {
+public:
+  thread_action() : action_waiting() {}
+
   virtual void action() = 0;
 
   virtual void start();
@@ -53,6 +62,7 @@ public:
 private:
   void thread_loop();
 
+  bool action_waiting;
   std::unique_ptr <std::thread> thread;
   std::mutex               action_lock;
   std::condition_variable  action_wait;

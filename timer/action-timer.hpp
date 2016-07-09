@@ -15,7 +15,7 @@ class action_timer {
 public:
   action_timer(int seed = time(nullptr)) : generator(seed) {}
 
-  typedef std::unique_ptr<thread_action> generic_action;
+  typedef std::unique_ptr <abstract_action> generic_action;
 
   void set_category(const std::string &category, double lambda);
   void set_action(const std::string &category, generic_action action);
