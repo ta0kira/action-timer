@@ -41,8 +41,10 @@ bool expand_escapes(std::string &escaped) {
   case s: unescaped.push_back(v); ++i; break;
 
       switch (escaped[++i]) {
+        SINGLE_CHAR_CASE('\\', '\\')
         SINGLE_CHAR_CASE('a', '\a')
         SINGLE_CHAR_CASE('b', '\b')
+        SINGLE_CHAR_CASE('e', '\x1b')
         SINGLE_CHAR_CASE('f', '\f')
         SINGLE_CHAR_CASE('n', '\n')
         SINGLE_CHAR_CASE('r', '\r')

@@ -9,13 +9,17 @@ newline_scale=5.0
 
 IFS=$'\n'
 
-formats=($(
-  for s in {0..7}; do
-    for i in {1..7}; do
-      echo "\x1b[$s;49;9${i}m"
+formats=(
+  $(
+    for s in {0..7}; do
+      for i in 0; do
+        for j in {0..7}; do
+          echo "\x1b[$s;4${i};9${j}m"
+        done
+      done
     done
-  done
-))
+  )
+)
 
 tokens=(
   '8.167/100:a'
@@ -79,9 +83,24 @@ all_events=(
 process_input() {
   while :; do
     read -d '' -N 1 -s char
+    # [Ctrl]+D: quit.
     if [ "$char" = $'\004' ]; then
       break
     fi
+    # [Esc]: kill formats.
+    if [ "$char" = $'\e' ]; then
+      printf '%s\n' "${formats[@]}" | sed 's/.*:/0:/'
+      # Try to restore terminal color.
+      echo $'\e[0;40;37m' 1>&2
+    fi
+    # [Backspace]: cause mayhem. (This kills the default action, which is the
+    # only way to completely empty the action timer, assuming all other actions
+    # have been removed. The program currently can't handle zero actions.)
+    if [ "$char" = $'\x7f' ]; then
+      echo $'\e[0;40;37m' 1>&2
+      char='check_for_updates'
+    fi
+    # Default: kill char.
     if [ -z "$char" ]; then
       char='\n'
     fi
