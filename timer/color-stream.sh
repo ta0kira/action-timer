@@ -93,9 +93,7 @@ process_input() {
       # Try to restore terminal color.
       echo $'\e[0;40;37m' 1>&2
     fi
-    # [Backspace]: cause mayhem. (This kills the default action, which is the
-    # only way to completely empty the action timer, assuming all other actions
-    # have been removed. The program currently can't handle zero actions.)
+    # [Backspace]: kill the default updates check.
     if [ "$char" = $'\x7f' ]; then
       echo $'\e[0;40;37m' 1>&2
       char='check_for_updates'

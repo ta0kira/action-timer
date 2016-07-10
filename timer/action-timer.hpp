@@ -113,6 +113,9 @@ private:
   std::default_random_engine generator;
   std::uniform_real_distribution <double> uniform;
 
+  std::mutex               empty_lock;
+  std::condition_variable  empty_wait;
+
   const unsigned int thread_count;
   locked_exponential_categorical locked_categories;
   locked_action_map              locked_actions;
@@ -125,6 +128,8 @@ void action_timer <Type> ::set_category(const Type &category, double lambda) {
   assert(category_write);
   if (lambda > 0) {
     category_write->set_category(category, lambda);
+    std::unique_lock <std::mutex> local_lock(empty_lock);
+    empty_wait.notify_all();
   } else {
     category_write->clear_category(category);
   }
@@ -146,9 +151,10 @@ void action_timer <Type> ::set_action(const Type &category, generic_action actio
 
 template <class Type>
 void action_timer <Type> ::start() {
-  threads.clear();
-  for (unsigned int i = 0; i < thread_count; ++i) {
-    threads.emplace_back(new std::thread([this,i] { this->thread_loop(i); }));
+  if (threads.empty()) {
+    for (unsigned int i = 0; i < thread_count; ++i) {
+      threads.emplace_back(new std::thread([this,i] { this->thread_loop(i); }));
+    }
   }
 }
 
@@ -162,7 +168,11 @@ void action_timer <Type> ::join() {
 
 template <class Type>
 action_timer <Type> ::~action_timer() {
-  destructor_called = true;
+  {
+    std::unique_lock <std::mutex> local_lock(empty_lock);
+    destructor_called = true;
+    empty_wait.notify_all();
+  }
   for (auto &thread : threads) {
     assert(thread);
     thread->join();
@@ -186,6 +196,19 @@ void action_timer <Type> ::thread_loop(unsigned int thread_number) {
 
     auto category_read = locked_categories.get_read_auth(auth);
     assert(category_read);
+
+    if (category_read->empty()) {
+      // NOTE: Failing to clear category_read will cause a deadlock!
+      category_read.clear();
+      assert(!category_read);
+      std::unique_lock <std::mutex> local_lock(empty_lock);
+      if (destructor_called) {
+        break;
+      }
+      empty_wait.wait(local_lock);
+      continue;
+    }
+
     // NOTE: Need to copy category to avoid a race condition!
     const Type   category = category_read->uniform_to_category(category_uniform);
     const double time     = category_read->uniform_to_time(time_uniform) * (double) thread_count;

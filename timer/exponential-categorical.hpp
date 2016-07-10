@@ -137,7 +137,7 @@ double exponential_categorical <Type> ::uniform_to_time(double uniform) const {
 
 template <class Type>
 bool exponential_categorical <Type> ::empty() const {
-  return categories.empty() || category_index.get_total();
+  return categories.empty() || !category_index.get_total();
 }
 
 #endif //exponential_categorical_hpp

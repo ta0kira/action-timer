@@ -32,7 +32,9 @@ void thread_action::set_action(std::function <void()> new_action) {
 }
 
 void thread_action::start() {
-  thread.reset(new std::thread([this] { this->thread_loop(); }));
+  if (!thread) {
+    thread.reset(new std::thread([this] { this->thread_loop(); }));
+  }
 }
 
 void thread_action::trigger_action() {
