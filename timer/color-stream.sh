@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-overall_scale=0.1
+overall_scale=1.0
 
 formats_scale=50.0
 tokens_scale=500.0

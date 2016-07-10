@@ -1,5 +1,11 @@
 #include "exponential-timer.hpp"
 
+namespace {
+
+const std::chrono::duration <double> sleep_granularity(0.01);
+
+}
+
 precise_timer::precise_timer() : base_time() {
   this->mark();
 }
@@ -9,15 +15,24 @@ void precise_timer::mark() {
     std::chrono::high_resolution_clock::now().time_since_epoch());
 }
 
-void precise_timer::sleep_for(double time) {
-  std::chrono::duration <double> target_duration(time);
-  auto current_time = std::chrono::duration_cast <std::chrono::duration <double>> (
-    std::chrono::high_resolution_clock::now().time_since_epoch());
-  auto sleep_duration = target_duration - (current_time - base_time);
-  // NOTE: If time is short enough then this will fall behind the actual time
-  // until there is a sleep long enough to catch up.
+void precise_timer::sleep_for(double time, std::function <bool()> cancel) {
+  const std::chrono::duration <double> target_duration(time);
   base_time += target_duration;
-  std::this_thread::sleep_for(sleep_duration);
+
+  while (!cancel || !cancel()) {
+    const auto current_time = std::chrono::duration_cast <std::chrono::duration <double>> (
+      std::chrono::high_resolution_clock::now().time_since_epoch());
+    if (base_time - current_time < sleep_granularity) {
+      std::this_thread::sleep_for(base_time - current_time);
+      break;
+    } else {
+      std::this_thread::sleep_for(sleep_granularity);
+    }
+  }
+}
+
+void thread_action::set_action(std::function <void()> new_action) {
+  action = new_action;
 }
 
 void thread_action::start() {
@@ -46,6 +61,8 @@ void thread_action::thread_loop() {
       }
       action_waiting = false;
     }
-    this->action();
+    if (action) {
+      action();
+    }
   }
 }

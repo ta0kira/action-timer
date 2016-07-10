@@ -6,6 +6,7 @@
 #include <chrono>
 #include <cmath>
 #include <condition_variable>
+#include <functional>
 #include <mutex>
 #include <string>
 #include <unordered_map>
@@ -37,7 +38,7 @@ public:
   precise_timer();
 
   void mark();
-  void sleep_for(double time);
+  void sleep_for(double time, std::function <bool()> cancel = nullptr);
 
 private:
   std::chrono::duration <double> base_time;
@@ -53,19 +54,23 @@ public:
 // Thread-safe, except for start.
 class thread_action : public abstract_action {
 public:
-  thread_action() : action_waiting() {}
+  // NOTE: A callback is used rather than a virtual function to avoid a race
+  // condition when destructing while trying to execute the action.
 
-  virtual void action() = 0;
+  thread_action(std::function <void()> new_action = nullptr) :
+  action_waiting(), action(new_action) {}
 
-  virtual void start();
-  virtual void trigger_action();
+  void set_action(std::function <void()> new_action);
+  void start();
+  void trigger_action();
 
-  virtual ~thread_action();
+  ~thread_action();
 
 private:
   void thread_loop();
 
   bool action_waiting;
+  std::function <void()> action;
   std::unique_ptr <std::thread> thread;
   std::mutex               action_lock;
   std::condition_variable  action_wait;

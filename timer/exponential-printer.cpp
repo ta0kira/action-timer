@@ -1,5 +1,6 @@
 #include <iostream>
 #include <string>
+#include <utility>
 
 #include <stdio.h>
 #include <string.h>
@@ -8,18 +9,10 @@
 
 namespace {
 
-class print_action : public thread_action {
-public:
-  explicit print_action(const std::string &new_output) : output(new_output) {}
-
-  void action() override {
-    std::cout << output;
-    std::cout.flush();
-  }
-
-private:
-  const std::string output;
-};
+void print_action(const std::string &output) {
+  std::cout << output;
+  std::cout.flush();
+}
 
 inline int unsafe_hex(char val) {
   if (val >= 'a' && val <= 'f') {
@@ -91,8 +84,8 @@ bool expand_escapes(std::string &escaped) {
 }
 
 int main(int argc, char *argv[]) {
-  action_timer <std::string> actions(5);
-  actions.set_category("check_for_updates", 5.0);
+  action_timer <std::string> actions(4);
+  actions.set_category("check_for_updates", 4.0);
   actions.start();
 
   std::string input;
@@ -113,7 +106,11 @@ int main(int argc, char *argv[]) {
     }
     actions.set_category(category, lambda);
     if (category != "check_for_updates") {
-      actions.set_action(category, action_timer <std::string> ::generic_action(lambda > 0 ? new print_action(text) : nullptr));
+      action_timer <std::string> ::generic_action action;
+      if (lambda > 0) {
+        action.reset(new thread_action([=] { print_action(text); }));
+      }
+      actions.set_action(category, std::move(action));
     }
   }
 }
