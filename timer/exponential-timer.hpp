@@ -16,20 +16,37 @@
 #include <thread>
 
 
+template <class Type>
+class category_indexer {
+public:
+  template <class Container>
+  void regenerate(Container container);
+  const Type &get_category(double uniform) const;
+  double get_total() const;
+
+private:
+  int binary_search(double target, int index_low, int index_high) const;
+
+  std::vector <std::pair<Type, double>> index;
+};
+
 // Not thread-safe!
 template <class Type>
 struct exponential_categorical {
 public:
-  exponential_categorical() : lambda_total() {}
+  // NOTE: Updates are linear time so that lookup can be logarithmic, since it's
+  // assumed that updates will be comparatively rare. Updates also aren't done
+  // lazily so that lookup can be done with const.
 
   bool set_category(const Type &category, double lambda);
   bool clear_category(const Type &category);
+
   const Type &uniform_to_category(double uniform) const;
   double uniform_to_time(double uniform) const;
   bool empty() const;
 
 private:
-  double lambda_total;
+  category_indexer <Type>           category_index;
   std::unordered_map <Type, double> categories;
 };
 
@@ -88,9 +105,9 @@ private:
 template <class Type>
 bool exponential_categorical <Type> ::set_category(const Type &category, double lambda) {
   assert(lambda >= 0);
-  const bool existed = this->clear_category(category);
+  const bool existed = categories.find(category) != categories.end();
   categories.emplace(category, lambda);
-  lambda_total += lambda;
+  category_index.regenerate(categories);
   return existed;
 }
 
@@ -100,36 +117,77 @@ bool exponential_categorical <Type> ::clear_category(const Type &category) {
   if (existing == categories.end()) {
     return false;
   } else {
-    lambda_total = std::max(0.0, lambda_total - existing->second);
     categories.erase(existing);
+    category_index.regenerate(categories);
     return true;
   }
 }
 
 template <class Type>
 const Type &exponential_categorical <Type> ::uniform_to_category(double uniform) const {
-  assert(!this->empty());
-  double target = uniform * lambda_total;
-  for (const auto &category : categories) {
-    if (target <= category.second) {
-      return category.first;
-    } else {
-      target -= category.second;
-    }
-  }
-  // This should only happen if uniform is extremely close to 1.0.
-  return categories.begin()->first;
+  return category_index.get_category(uniform);
 }
 
 template <class Type>
 double exponential_categorical <Type> ::uniform_to_time(double uniform) const {
-  assert(!this->empty());
-  return -log(uniform) / lambda_total;
+  return -log(uniform) / category_index.get_total();
 }
 
 template <class Type>
 bool exponential_categorical <Type> ::empty() const {
-  return categories.empty() || lambda_total == 0;
+  return categories.empty() || category_index.get_total();
+}
+
+
+template <class Type> template <class Container>
+void category_indexer <Type> ::regenerate(Container container) {
+  index.clear();
+  index.reserve(container.size());
+  double total = 0.0;
+  for (const auto &item : container) {
+    index.push_back(item);
+    assert(index.rbegin()->second >= 0.0);
+    total = index.rbegin()->second += total;
+  }
+}
+
+template <class Type>
+const Type &category_indexer <Type> ::get_category(double uniform) const {
+  assert(index.size());
+  assert(uniform >= 0.0 && uniform <= 1.0);
+  const double target = uniform * index.rbegin()->second;
+  const int location = this->binary_search(target, 0, (signed) index.size() - 1);
+  assert(location >= 0 && location < (signed) index.size());
+  return index[location].first;
+}
+
+template <class Type>
+double category_indexer <Type> ::get_total() const {
+  return index.empty()? 0.0 : index.rbegin()->second;
+}
+
+template <class Type>
+int category_indexer <Type> ::binary_search(double target, int index_low, int index_high) const {
+  assert(index_low <= index_high);
+  if (index_low == index_high) {
+    // Only one element left.
+    return index_high;
+  }
+  if (target < index[index_low].second) {
+    // Inside the interval ending at the low index, assuming the value at
+    // low-1 is lower than the target.
+    return index_low;
+  }
+  const int index_mid = (index_high + index_low) / 2;
+  if (target < index[index_mid].second) {
+    // Target is in the lower half.
+    return this->binary_search(target, index_low, index_mid);
+  } else {
+    // Target is in the upper half. Note that the midpoint must be excluded
+    // for logic above to work. Note that mid+1 <= high because the average of
+    // low and high must be < high.
+    return this->binary_search(target, index_mid + 1, index_high);
+  }
 }
 
 #endif //exponential_timer_hpp
