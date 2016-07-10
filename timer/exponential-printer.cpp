@@ -100,6 +100,8 @@ int main(int argc, char *argv[]) {
     }
     const std::string category(buffer);
     std::string text(category);
+    // NOTE: The string might contain '\0' after expanding, which is fine, but
+    // needs to be accounted for when printing.
     if (!expand_escapes(text)) {
       fprintf(stderr, "%s: Failed to parse \"%s\".\n", argv[0], input.c_str());
       continue;

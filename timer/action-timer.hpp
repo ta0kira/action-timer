@@ -10,7 +10,59 @@
 #include <time.h>
 
 #include "locking-container.hpp"
-#include "exponential-timer.hpp"
+#include "exponential-categorical.hpp"
+
+
+// The antithesis of thread-safe!
+class precise_timer {
+public:
+  precise_timer();
+
+  void mark();
+  void sleep_for(double time, std::function <bool()> cancel = nullptr);
+
+private:
+  std::chrono::duration <double> base_time;
+};
+
+class abstract_action {
+public:
+  virtual void start() = 0;
+  virtual void trigger_action() = 0;
+  virtual ~abstract_action() = default;
+};
+
+// Thread-safe, except for start.
+class thread_action : public abstract_action {
+public:
+  // NOTE: A callback is used rather than a virtual function to avoid a race
+  // condition when destructing while trying to execute the action.
+
+  thread_action(std::function <void()> new_action = nullptr) :
+  destructor_called(), action_waiting(), action(new_action) {}
+
+  void set_action(std::function <void()> new_action);
+  void start();
+  void trigger_action();
+
+  // NOTE: This waits for the thread to reach an exit point, which could result
+  // in waiting for the current action to finish executing. The consequences
+  // should be no worse than the action being executed. For this reason, the
+  // action shouldn't block forever for an reason.
+  ~thread_action();
+
+private:
+  void thread_loop();
+
+  std::atomic <bool> destructor_called;
+  std::unique_ptr <std::thread> thread;
+
+  bool action_waiting;
+  std::function <void()> action;
+
+  std::mutex               action_lock;
+  std::condition_variable  action_wait;
+};
 
 template <class Type>
 class action_timer {
@@ -26,9 +78,9 @@ public:
 
   void set_category(const Type &category, double lambda);
 
-  // Ideally, thread_action should be used so that the amount of time spent on
-  // the action by the timer thread is extremely small, with the actual
-  // execution of the action happening in a dedicated thread.
+  // Ideally, thread_action (or similar) should be used so that the amount of
+  // time spent on the action by the timer thread is extremely small, with the
+  // actual execution of the action happening in a dedicated thread.
   void set_action(const Type &category, generic_action action);
 
   void start();
