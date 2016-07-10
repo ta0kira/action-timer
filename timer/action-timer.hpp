@@ -15,12 +15,20 @@
 template <class Type>
 class action_timer {
 public:
+  typedef std::unique_ptr <abstract_action> generic_action;
+
+  // The number of threads is primarily intended for making timing more accurate
+  // when high lambda values are used. When n threads are used, all sleeps are
+  // multiplied by n, which decreases the ratio of overhead to actual sleeping
+  // time, which allows shorter sleeps to be more accurate.
   explicit action_timer(unsigned int threads = 1, int seed = time(nullptr)) :
   destructor_called(false), generator(seed), thread_count(threads) {}
 
-  typedef std::unique_ptr <abstract_action> generic_action;
-
   void set_category(const Type &category, double lambda);
+
+  // Ideally, thread_action should be used so that the amount of time spent on
+  // the action by the timer thread is extremely small, with the actual
+  // execution of the action happening in a dedicated thread.
   void set_action(const Type &category, generic_action action);
 
   void start();
@@ -83,7 +91,7 @@ template <class Type>
 void action_timer <Type> ::start() {
   threads.clear();
   for (unsigned int i = 0; i < thread_count; ++i) {
-    threads.emplace_back(new std::thread([=] { this->thread_loop(i); }));
+    threads.emplace_back(new std::thread([this,i] { this->thread_loop(i); }));
   }
 }
 
@@ -127,7 +135,7 @@ void action_timer <Type> ::thread_loop(unsigned int thread_number) {
     category_read.clear();
     assert(!category_read);
 
-    timer.sleep_for(time, [=] { return (bool) destructor_called; });
+    timer.sleep_for(time, [this] { return (bool) destructor_called; });
     if (destructor_called) {
       break;
     }
