@@ -21,6 +21,11 @@ public:
   void mark();
   void sleep_for(double time, std::function <bool()> cancel = nullptr);
 
+  // The cancel callback is checked at this granularity during sleep_for, i.e.,
+  // this is approximately the max latency for cancelation, with the expectation
+  // being about half of this.
+  static const std::chrono::duration <double> sleep_granularity;
+
 private:
   std::chrono::duration <double> base_time;
 };
