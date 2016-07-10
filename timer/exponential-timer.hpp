@@ -14,6 +14,7 @@
 #include <thread>
 
 
+// Not thread-safe!
 template <class Type>
 struct exponential_categorical {
 public:
@@ -30,6 +31,7 @@ private:
   std::unordered_map <Type, double> categories;
 };
 
+// The opposite of thread-safe!
 class precise_timer {
 public:
   precise_timer();
@@ -48,6 +50,7 @@ public:
   virtual ~abstract_action() = default;
 };
 
+// Thread-safe, except for start.
 class thread_action : public abstract_action {
 public:
   thread_action() : action_waiting() {}
@@ -108,7 +111,7 @@ const Type &exponential_categorical <Type> ::uniform_to_category(double uniform)
 template <class Type>
 double exponential_categorical <Type> ::uniform_to_time(double uniform) const {
   assert(!this->empty());
-  return -log(uniform) / (double) lambda_total;
+  return -log(uniform) / lambda_total;
 }
 
 template <class Type>

@@ -25,10 +25,8 @@ void thread_action::start() {
 }
 
 void thread_action::trigger_action() {
-  {
-    std::unique_lock <std::mutex> local_lock(action_lock);
-    action_waiting = true;
-  }
+  std::unique_lock <std::mutex> local_lock(action_lock);
+  action_waiting = true;
   action_wait.notify_all();
 }
 

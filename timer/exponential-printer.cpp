@@ -10,7 +10,7 @@ namespace {
 
 class print_action : public thread_action {
 public:
-  print_action(const std::string &new_output) : output(new_output) {}
+  explicit print_action(const std::string &new_output) : output(new_output) {}
 
   void action() override {
     std::cout << output;
@@ -91,8 +91,8 @@ bool expand_escapes(std::string &escaped) {
 }
 
 int main(int argc, char *argv[]) {
-  action_timer actions;
-  actions.set_category("check_for_updates", 1.0);
+  action_timer <std::string> actions(5);
+  actions.set_category("check_for_updates", 5.0);
   actions.start();
 
   std::string input;
@@ -113,7 +113,7 @@ int main(int argc, char *argv[]) {
     }
     actions.set_category(category, lambda);
     if (category != "check_for_updates") {
-      actions.set_action(category, action_timer::generic_action(lambda > 0 ? new print_action(text) : nullptr));
+      actions.set_action(category, action_timer <std::string> ::generic_action(lambda > 0 ? new print_action(text) : nullptr));
     }
   }
 }

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-overall_scale=1
+overall_scale=0.1
 
 formats_scale=50.0
 tokens_scale=500.0
@@ -49,9 +49,10 @@ tokens=(
 apply_scale() {
   local scale=$1
   shift
-  scale=$(bc <<< "scale = 20; $overall_scale*$scale/$#")
   for val in "$@"; do
-    printf '%s:%s\n' "$scale" "$val"
+    # NOTE: Leave this inside the loop to avoid divide-by-zero when empty.
+    relative=$(bc <<< "scale = 20; $overall_scale*$scale/$#")
+    printf '%s:%s\n' "$relative" "$val"
   done
 }
 
