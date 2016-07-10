@@ -46,13 +46,15 @@ void thread_action::trigger_action() {
 }
 
 thread_action::~thread_action() {
+  destructor_called = true;
+  action_wait.notify_all();
   if (thread) {
-    thread->detach();
+    thread->join();
   }
 }
 
 void thread_action::thread_loop() {
-  while (true) {
+  while (!destructor_called) {
     {
       std::unique_lock <std::mutex> local_lock(action_lock);
       if (!action_waiting) {
@@ -61,7 +63,7 @@ void thread_action::thread_loop() {
       }
       action_waiting = false;
     }
-    if (action) {
+    if (action && !destructor_called) {
       action();
     }
   }

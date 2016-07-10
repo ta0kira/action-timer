@@ -2,6 +2,7 @@
 #define exponential_timer_hpp
 
 #include <algorithm>
+#include <atomic>
 #include <cassert>
 #include <chrono>
 #include <cmath>
@@ -58,20 +59,27 @@ public:
   // condition when destructing while trying to execute the action.
 
   thread_action(std::function <void()> new_action = nullptr) :
-  action_waiting(), action(new_action) {}
+  destructor_called(), action_waiting(), action(new_action) {}
 
   void set_action(std::function <void()> new_action);
   void start();
   void trigger_action();
 
+  // NOTE: This waits for the thread to reach an exit point, which could result
+  // in waiting for the current action to finish executing. The consequences
+  // should be no worse than the action being executed. For this reason, the
+  // action shouldn't block forever for an reason.
   ~thread_action();
 
 private:
   void thread_loop();
 
+  std::atomic <bool> destructor_called;
+  std::unique_ptr <std::thread> thread;
+
   bool action_waiting;
   std::function <void()> action;
-  std::unique_ptr <std::thread> thread;
+
   std::mutex               action_lock;
   std::condition_variable  action_wait;
 };

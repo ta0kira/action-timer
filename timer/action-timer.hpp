@@ -1,6 +1,7 @@
 #ifndef action_timer_hpp
 #define action_timer_hpp
 
+#include <atomic>
 #include <list>
 #include <memory>
 #include <random>
