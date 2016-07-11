@@ -20,7 +20,7 @@ struct category_node_test {
   void run() {
     RUN_TEST(test_exists_self());
     RUN_TEST(test_exists_child());
-    RUN_TEST(test_find());
+    RUN_TEST(test_locate());
     RUN_TEST(test_update_size());
 
     RUN_TEST(test_remove_lowest_node_no_rebalance_1_0());
@@ -53,18 +53,22 @@ struct category_node_test {
     EXPECT_TRUE(!node.category_exists("D"));
   }
 
-  void test_find() {
-    node_type node("B", 1);
-    node.low_child.reset(new node_type("A", 2));
-    node.high_child.reset(new node_type("C", 3));
-    node.total_size = 6;
-    EXPECT_TRUE(node.find(0) == "B");
-    EXPECT_TRUE(node.find(1) == "B");
-    EXPECT_TRUE(node.find(2) == "A");
-    EXPECT_TRUE(node.find(3) == "A");
-    EXPECT_TRUE(node.find(4) == "C");
-    EXPECT_TRUE(node.find(5) == "C");
-    EXPECT_TRUE(node.find(6) == "C");
+  void test_locate() {
+    std::unique_ptr <node_type> node;
+    EXPECT_TRUE(node_type::update_or_add(node, "B", 2) == 1);
+    EXPECT_TRUE(node_type::update_or_add(node, "A", 1) == 1);
+    EXPECT_TRUE(node_type::update_or_add(node, "D", 4) == 0);
+    EXPECT_TRUE(node_type::update_or_add(node, "C", 3) == 1);
+    EXPECT_TRUE(node->locate(0) == "A");
+    EXPECT_TRUE(node->locate(1) == "B");
+    EXPECT_TRUE(node->locate(2) == "B");
+    EXPECT_TRUE(node->locate(3) == "C");
+    EXPECT_TRUE(node->locate(4) == "C");
+    EXPECT_TRUE(node->locate(5) == "C");
+    EXPECT_TRUE(node->locate(6) == "D");
+    EXPECT_TRUE(node->locate(7) == "D");
+    EXPECT_TRUE(node->locate(8) == "D");
+    EXPECT_TRUE(node->locate(9) == "D");
   }
 
   void test_update_size() {

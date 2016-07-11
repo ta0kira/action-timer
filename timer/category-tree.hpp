@@ -18,9 +18,9 @@ public:
     return head && head->category_exists(value);
   }
 
-  const Type &find(Size size) {
+  const Type &locate(Size size) {
     assert(head && size >= Type() && size <= this->get_total_size());
-    return head->find(size);
+    return head->locate(size);
   }
 
   bool update_or_add(const Type &value, Size new_size) {
@@ -66,24 +66,22 @@ public:
     return false;
   }
 
-  const Type &find(Size size) const {
-    // Interval is divided into three parts: self, low, high.
-    if (size <= data.size) {
+  const Type &locate(Size size) const {
+    // (Hopefully this doesn't cause problems in recursive calls after doing
+    // subtractions below.)
+    assert(size >= Size() && size < total_size);
+    // Interval is divided into three parts: low, self, high.
+    if (low_child && size < low_child->total_size) {
+      return low_child->locate(size);
+    }
+    if (low_child) size -= low_child->total_size;
+    // Not in first part => move to second.
+    if (size < data.size) {
       return data.value;
     }
-    // Not in first part => move to second.
     size -= data.size;
-    if (low_child && size <= low_child->data.size) {
-      return low_child->find(size);
-    }
     // Not in second part => move to third.
-    if (low_child) size -= low_child->data.size;
-    if (high_child && size <= high_child->data.size) {
-      return high_child->find(size);
-    }
-    // Return self by default, since numerical error might prevent size from
-    // falling into the third part.
-    return data.value;
+    high_child->locate(size);
   }
 
   Size get_total_size() {
@@ -221,15 +219,28 @@ private:
       current->balance -= pivot_low(current->low_child);
     }
     assert(current->low_child->balance <= 0);
-    int height_change = 0;
-    if (current->balance <= 0) {
-      height_change = -1;
-    } else if (current->low_child->balance > 1) {
-      height_change = 1;
-    }
     // 1. Correct balance values.
-    current->balance += 1 - current->low_child->balance;
-    current->low_child->balance += 1;
+    // TODO: Update the stuff below!
+int height_change = 0;
+//     int height_a = 0, height_b = 0, height_c = 0;
+//     if (current->balance < 0) {
+//       height_a -= current->balance;
+//     } else {
+//       height_b += current->balance;
+//       height_c += current->balance;
+//     }
+//     if (current->high_child->balance < 0) {
+//       height_c += current->high_child->balance;
+//     } else {
+//       height_b -= current->high_child->balance;
+//     }
+//     const int old_height = std::max(height_a, std::max(height_b, height_c));
+//     height_a += 1;
+//     height_c -= 1;
+//     const int new_height = std::max(height_a, std::max(height_b, height_c));
+//     const int height_change = new_height - old_height;
+//     current->balance = height_b - height_a;
+//     current->high_child->balance = height_c - std::max(height_a, height_b);
     // 2. Pivot.
     optional_node temp;
     temp.swap(current->low_child);
