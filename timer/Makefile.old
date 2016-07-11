@@ -1,0 +1,27 @@
+HEADERS=action-timer.hpp exponential-categorical.hpp
+COMPILE=c++ -Wall -pedantic -std=c++11 -O0 -g $(CPP_FLAGS)
+
+.PHONY: all test clean
+
+all: exponential-printer
+
+exponential-printer: exponential-printer.o action-timer.o locking-container.o
+	c++ exponential-printer.o locking-container.o action-timer.o -o exponential-printer -pthread
+
+exponential-printer.o: exponential-printer.cpp $(HEADERS)
+	$(COMPILE) -I../include -c exponential-printer.cpp
+
+action-timer.o: action-timer.cpp $(HEADERS)
+	$(COMPILE) -I../include -c action-timer.cpp
+
+locking-container.o: ../include/locking-container.inc
+	$(COMPILE) -x c++ -c ../include/locking-container.inc
+
+category-tree-test: category-tree-test.cpp category-tree.hpp
+	c++ -Wall -pedantic -std=c++11 -O0 -g category-tree-test.cpp -o category-tree-test -lgtest
+
+test: category-tree-test
+	./category-tree-test
+
+clean:
+	rm -fv exponential-printer exponential-printer.o locking-container.o action-timer.o category-tree-test
