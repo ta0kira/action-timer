@@ -108,7 +108,7 @@ process_input() {
 
 cd "$(dirname "$0")" || exit 1
 
-make exponential-printer || exit 1
+make --makefile Makefile.old exponential-printer || exit 1
 
 {
   printf '%s\n' "${all_events[@]}"

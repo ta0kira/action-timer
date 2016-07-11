@@ -15,28 +15,32 @@ public:
   using node_type = category_node <Type, Size>;
 
   bool category_exists(const Type &value) const {
-    return head && head->category_exists(value);
+    return root && root->category_exists(value);
   }
 
   const Type &locate(Size size) const {
-    assert(head && size >= Type() && size < this->get_total_size());
-    return head->locate(size);
+    assert(root && size >= Size() && size < this->get_total_size());
+    return root->locate(size);
   }
 
   void update_or_add(const Type &value, Size new_size) {
-    node_type::optional_node::update_or_add(head, value, new_size);
+    node_type::update_or_add(root, value, new_size);
   }
 
   void erase(const Type &value) {
-    node_type::optional_node::erase(head, value);
+    node_type::erase(root, value);
   }
 
   Size get_total_size() const {
-    return head? head->get_total_size() : Size();
+    return root? root->get_total_size() : Size();
   }
 
 private:
-  typename node_type::optional_node head;
+  typename node_type::optional_node root;
+
+#ifdef TESTING
+  FRIEND_TEST(category_tree_test, integration_test);
+#endif
 };
 
 template <class Type, class Size>
@@ -56,7 +60,7 @@ public:
   category_node(const Type &new_value, Size new_size) :
   height(1), total_size(), data(new_value, new_size) {}
 
-  Size get_total_size() {
+  Size get_total_size() const {
     return total_size;
   }
 
@@ -86,11 +90,9 @@ public:
     }
     // Not in second part => move to third.
     size -= data.size;
-    high_child->locate(size);
+    return high_child->locate(size);
   }
 
-  // NOTE: current is a unique_ptr passed by reference because balancing
-  // operations sometimes require the node being operated on to be swapped out.
   static void update_or_add(optional_node &current, const Type &new_value, Size new_size) {
     if (!current) {
       current.reset(new category_node(new_value, new_size));
@@ -104,39 +106,18 @@ public:
     update_and_rebalance(current);
   }
 
-  // NOTE: current is a unique_ptr passed by reference because balancing
-  // operations sometimes require the node being operated on to be swapped out.
   static void erase(optional_node &current, const Type &new_value) {
-//     if (!current) {
-//       return 0;
-//     }
-//     int height_change = 0;
-//     optional_node discard;
-//     if (current->data.value == new_value) {
-//       return remove_node(current, discard);
-//     } else if (new_value < current->data.value) {
-//       if (!current->low_child) {
-//         return 0;
-//       } else {
-//         // Recusive call low.
-//         current->balance -= erase(current->low_child, new_value);
-//         if (current->balance < -1) {
-//           height_change = pivot_high(current);
-//         }
-//       }
-//     } else {
-//       if (!current->high_child) {
-//         return 0;
-//       } else {
-//         // Recusive call high.
-//         current->balance -= erase(current->high_child, new_value);
-//         if (current->balance < 1) {
-//           height_change = pivot_low(current);
-//         }
-//       }
-//     }
-//     update_size(current.get());
-//     return height_change;
+    optional_node discard;
+    if (!current) {
+      return;
+    } else if (current->data.value == new_value) {
+      remove_node(current, discard);
+    } else if (new_value < current->data.value) {
+      erase(current->low_child, new_value);
+    } else {
+      erase(current->high_child, new_value);
+    }
+    update_and_rebalance(current);
   }
 
 private:
@@ -154,14 +135,15 @@ private:
   }
 
   static void update_and_rebalance(optional_node &current) {
-    assert(current);
-    current->update_size();
-    const int balance = current->update_height();
-    if (balance < -1) {
-      pivot_high(current);
-    }
-    if (balance > 1) {
-      pivot_low(current);
+    if (current) {
+      current->update_size();
+      const int balance = current->update_height();
+      if (balance < -1) {
+        pivot_high(current);
+      }
+      if (balance > 1) {
+        pivot_low(current);
+      }
     }
   }
 
@@ -226,12 +208,20 @@ private:
       removed.swap(discard);
       assert(removed);
       removed->update_size();
+      removed->update_height();
+      return;
     }
     optional_node new_parent;
     if (current->update_height() < 0) {
-      remove_lowest_node(current, new_parent);
+      remove_highest_node(current->low_child, new_parent);
+      if (!new_parent) {
+        remove_node(current->low_child, new_parent);
+      }
     } else {
-      remove_highest_node(current, new_parent);
+      remove_lowest_node(current->high_child, new_parent);
+      if (!new_parent) {
+        remove_node(current->high_child, new_parent);
+      }
     }
     assert(new_parent);
     assert(!new_parent->low_child);
@@ -249,7 +239,10 @@ private:
   }
 
   static void remove_lowest_node(optional_node &current, optional_node &removed) {
-    assert(current && current->low_child);
+    assert(current);
+    if (!current->low_child) {
+      return;
+    }
     if (!current->low_child->low_child) {
       optional_node discard;
       discard.swap(current->low_child->high_child);
@@ -262,7 +255,10 @@ private:
   }
 
   static void remove_highest_node(optional_node &current, optional_node &removed) {
-    assert(current && current->high_child);
+    assert(current);
+    if (!current->high_child) {
+      return;
+    }
     if (!current->high_child->high_child) {
       optional_node discard;
       discard.swap(current->high_child->low_child);
@@ -284,6 +280,10 @@ private:
 #ifdef TESTING
   FRIEND_TEST(category_node_test, test_exists_child);
   FRIEND_TEST(category_node_test, test_update_size);
+  FRIEND_TEST(category_node_test, test_insert_no_rebalance);
+  FRIEND_TEST(category_node_test, test_insert_rebalance_ordered);
+  FRIEND_TEST(category_node_test, test_insert_rebalance_unordered);
+  FRIEND_TEST(category_node_test, erase_all_unordered);
   FRIEND_TEST(category_node_test, test_remove_lowest_node_no_rebalance_1_0);
   FRIEND_TEST(category_node_test, test_remove_lowest_node_no_rebalance_1_1);
   FRIEND_TEST(category_node_test, test_remove_lowest_node_no_rebalance_2_1);
@@ -292,14 +292,19 @@ private:
   FRIEND_TEST(category_node_test, test_remove_highest_node_no_rebalance_1_1);
   FRIEND_TEST(category_node_test, test_remove_highest_node_no_rebalance_1_2);
   FRIEND_TEST(category_node_test, test_remove_highest_node_rebalance_2_1);
-  FRIEND_TEST(category_node_test, test_insert_no_rebalance);
-  FRIEND_TEST(category_node_test, test_insert_massive_unordered);
+  FRIEND_TEST(category_node_test, test_remove_node_no_rebalance_low);
+  FRIEND_TEST(category_node_test, test_remove_node_no_rebalance_high);
+  FRIEND_TEST(category_node_test, test_remove_node_no_rebalance_low_low);
+  FRIEND_TEST(category_node_test, test_remove_node_no_rebalance_low_high);
+  FRIEND_TEST(category_node_test, test_remove_node_no_rebalance_high_low);
+  FRIEND_TEST(category_node_test, test_remove_node_no_rebalance_high_high);
   FRIEND_TEST(category_node_test, test_pivot_low_no_recursion_1_1);
   FRIEND_TEST(category_node_test, test_pivot_low_no_recursion_1_2);
   FRIEND_TEST(category_node_test, test_pivot_low_high_recursion_1_2);
   FRIEND_TEST(category_node_test, test_pivot_high_no_recursion_1_1);
   FRIEND_TEST(category_node_test, test_pivot_high_no_recursion_2_1);
   FRIEND_TEST(category_node_test, test_pivot_high_low_recursion_2_1);
+  FRIEND_TEST(category_tree_test, integration_test);
 
   bool validate_tree(std::function <bool(const category_node&)> validate) const {
     assert(validate);
