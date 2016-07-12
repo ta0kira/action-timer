@@ -91,6 +91,7 @@ public:
       return data.value;
     }
     // Not in second part => move to third.
+    size -= data.size;
     return high_child->locate(size);
   }
 
