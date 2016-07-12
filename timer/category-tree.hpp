@@ -129,21 +129,26 @@ private:
     if (high_child) total_size += high_child->total_size;
   }
 
-  int update_height() {
+  void update_height() {
     const int low_height  = low_child?  low_child->height  : 0;
     const int high_height = high_child? high_child->height : 0;
     height = std::max(low_height, high_height) + 1;
+  }
+
+  int balance() {
+    const int low_height  = low_child?  low_child->height  : 0;
+    const int high_height = high_child? high_child->height : 0;
     return high_height - low_height;
   }
 
   static void update_and_rebalance(optional_node &current) {
     if (current) {
       current->update_size();
-      const int balance = current->update_height();
-      if (balance < -1) {
+      current->update_height();
+      if (current->balance() < -1) {
         pivot_high(current);
       }
-      if (balance > 1) {
+      if (current->balance() > 1) {
         pivot_low(current);
       }
     }
@@ -152,9 +157,7 @@ private:
   static void pivot_low(optional_node &current) {
     assert(current->high_child);
     // Make sure that high_child has non-negative balance.
-    const int low_height  = current->high_child->low_child?  current->high_child->low_child->height  : 0;
-    const int high_height = current->high_child->high_child? current->high_child->high_child->height : 0;
-    if (high_height - low_height < 0) {
+    if (current->high_child->balance() < 0) {
       pivot_high(current->high_child);
     }
     // Pivot.
@@ -174,10 +177,8 @@ private:
 
   static void pivot_high(optional_node &current) {
     assert(current->low_child);
-    // Make sure that low_child has non-negative balance.
-    const int high_height = current->low_child->high_child? current->low_child->high_child->height : 0;
-    const int low_height  = current->low_child->low_child?  current->low_child->low_child->height  : 0;
-    if (low_height - high_height < 0) {
+    // Make sure that low_child has non-positive balance.
+    if (current->low_child->balance() > 0) {
       pivot_low(current->low_child);
     }
     // Pivot.
@@ -214,16 +215,12 @@ private:
       return;
     }
     optional_node new_parent;
-    if (current->update_height() < 0) {
+    if (current->balance() < 0) {
       remove_highest_node(current->low_child, new_parent);
-      if (!new_parent) {
-        remove_node(current->low_child, new_parent);
-      }
+      assert(new_parent);
     } else {
       remove_lowest_node(current->high_child, new_parent);
-      if (!new_parent) {
-        remove_node(current->high_child, new_parent);
-      }
+      assert(new_parent);
     }
     assert(new_parent);
     assert(!new_parent->low_child);
@@ -243,33 +240,27 @@ private:
   static void remove_lowest_node(optional_node &current, optional_node &removed) {
     assert(current);
     if (!current->low_child) {
-      return;
-    }
-    if (!current->low_child->low_child) {
       optional_node discard;
-      discard.swap(current->low_child->high_child);
-      discard.swap(current->low_child);
+      discard.swap(current->high_child);
+      discard.swap(current);
       removed.swap(discard);
     } else {
       remove_lowest_node(current->low_child, removed);
+      update_and_rebalance(current);
     }
-    update_and_rebalance(current);
   }
 
   static void remove_highest_node(optional_node &current, optional_node &removed) {
     assert(current);
     if (!current->high_child) {
-      return;
-    }
-    if (!current->high_child->high_child) {
       optional_node discard;
-      discard.swap(current->high_child->low_child);
-      discard.swap(current->high_child);
+      discard.swap(current->low_child);
+      discard.swap(current);
       removed.swap(discard);
     } else {
       remove_highest_node(current->high_child, removed);
+      update_and_rebalance(current);
     }
-    update_and_rebalance(current);
   }
 
   int  height;
