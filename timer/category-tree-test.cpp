@@ -28,11 +28,15 @@ private:
       std::cerr << padding << "|- ";
       print_value(*node.low_child);
       print_node(*node.low_child, padding + "|  ");
+    } else if (node.high_child) {
+      std::cerr << padding << "|- _" << std::endl;
     }
     if (node.high_child) {
       std::cerr << padding << "\\- ";
       print_value(*node.high_child);
       print_node(*node.high_child, padding + "   ");
+    } else if (node.low_child) {
+      std::cerr << padding << "\\- _" << std::endl;
     }
   }
 
@@ -519,7 +523,8 @@ TEST(category_tree_test, integration_test) {
   category_tree <int> tree;
   const int element_count = (1 << 8) + (1 << 7);
   for (int i = 0; i < element_count; ++i) {
-    tree.update_or_add(i, 1);
+    const int adjusted = ((i + 19) * 13) % element_count;
+    tree.update_or_add(adjusted, 1);
     EXPECT_EQ(i + 1, tree.get_total_size());
     EXPECT_TRUE(tree.root->validate_balanced());
     EXPECT_TRUE(tree.root->validate_sorted());
