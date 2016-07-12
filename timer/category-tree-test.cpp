@@ -122,6 +122,7 @@ TEST(category_node_test, test_insert_rebalance_ordered) {
   for (int i = 0; i < element_count; ++i) {
     num_node_type::update_or_add(node, i, 1);
     EXPECT_EQ(i + 1, node->get_total_size());
+    // (Yes, this makes it quadratic...)
     EXPECT_TRUE(node->validate_balanced());
     EXPECT_TRUE(node->validate_sorted());
     EXPECT_TRUE(node->validate_sized());
@@ -135,7 +136,7 @@ TEST(category_node_test, test_insert_rebalance_ordered) {
   for (int i = 0; i < node->get_total_size(); ++i) {
     EXPECT_EQ(i, node->locate(i));
   }
-  for (int i = 0; i < node->get_total_size(); ++i) {
+  for (int i = 0; i < element_count; ++i) {
     EXPECT_TRUE(node->category_exists(i));
   }
 }
@@ -147,6 +148,7 @@ TEST(category_node_test, test_insert_rebalance_unordered) {
     const int adjusted = ((i + 13) * 19) % element_count;
     num_node_type::update_or_add(node, adjusted, 1);
     EXPECT_EQ(i + 1, node->get_total_size());
+    // (Yes, this makes it quadratic...)
     EXPECT_TRUE(node->validate_balanced());
     EXPECT_TRUE(node->validate_sorted());
     EXPECT_TRUE(node->validate_sized());
@@ -160,7 +162,7 @@ TEST(category_node_test, test_insert_rebalance_unordered) {
   for (int i = 0; i < node->get_total_size(); ++i) {
     EXPECT_EQ(i, node->locate(i));
   }
-  for (int i = 0; i < node->get_total_size(); ++i) {
+  for (int i = 0; i < element_count; ++i) {
     EXPECT_TRUE(node->category_exists(i));
   }
 }
@@ -183,6 +185,7 @@ TEST(category_node_test, erase_all_unordered) {
       EXPECT_NE(nullptr, node);
       EXPECT_FALSE(node->category_exists(adjusted));
       EXPECT_EQ(element_count - (i + 1), node->get_total_size());
+      // (Yes, this makes it quadratic...)
       EXPECT_TRUE(node->validate_balanced());
       EXPECT_TRUE(node->validate_sorted());
       EXPECT_TRUE(node->validate_sized());
@@ -524,30 +527,32 @@ TEST(category_tree_test, integration_test) {
   const int element_count = (1 << 8) + (1 << 7);
   for (int i = 0; i < element_count; ++i) {
     const int adjusted = ((i + 19) * 13) % element_count;
-    tree.update_or_add(adjusted, 1);
-    EXPECT_EQ(i + 1, tree.get_total_size());
+    tree.update_or_add(adjusted, 2);
+    EXPECT_EQ(2 * (i + 1), tree.get_total_size());
+    // (Yes, this makes it quadratic...)
     EXPECT_TRUE(tree.root->validate_balanced());
     EXPECT_TRUE(tree.root->validate_sorted());
     EXPECT_TRUE(tree.root->validate_sized());
   }
   EXPECT_NE(nullptr, tree.root);
-  EXPECT_EQ(element_count, tree.get_total_size());
+  EXPECT_EQ(2 * element_count, tree.get_total_size());
   for (int i = 0; i < tree.get_total_size(); ++i) {
-    EXPECT_EQ(i, tree.locate(i));
+    EXPECT_EQ(i / 2, tree.locate(i));
   }
-  for (int i = 0; i < tree.get_total_size(); ++i) {
+  for (int i = 0; i < element_count; ++i) {
     EXPECT_TRUE(tree.category_exists(i));
   }
   for (int i = 0; i < element_count; ++i) {
     const int adjusted = ((i + 13) * 19) % element_count;
     EXPECT_TRUE(tree.category_exists(adjusted));
     tree.erase(adjusted);
-    EXPECT_EQ(element_count - (i + 1), tree.get_total_size());
+    EXPECT_EQ(2 * (element_count - (i + 1)), tree.get_total_size());
     EXPECT_FALSE(tree.category_exists(adjusted));
     if (i == element_count - 1) {
       EXPECT_EQ(nullptr, tree.root);
     } else {
       EXPECT_NE(nullptr, tree.root);
+      // (Yes, this makes it quadratic...)
       EXPECT_TRUE(tree.root->validate_balanced());
       EXPECT_TRUE(tree.root->validate_sorted());
       EXPECT_TRUE(tree.root->validate_sized());
