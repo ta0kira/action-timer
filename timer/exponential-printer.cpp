@@ -7,6 +7,9 @@
 
 #include "action-timer.hpp"
 
+// For linking of non-template locking-container symbols.
+#include "locking-container.inc"
+
 namespace {
 
 void print_action(const std::string &output) {
