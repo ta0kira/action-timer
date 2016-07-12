@@ -85,11 +85,12 @@ public:
     }
     // Not in first part => move to second.
     if (low_child) size -= low_child->total_size;
+    // NOTE: Checking high_child prevents problems below if there is a precision
+    // error that makes size >= data.size.
     if (!high_child || size < data.size) {
       return data.value;
     }
     // Not in second part => move to third.
-    size -= data.size;
     return high_child->locate(size);
   }
 
