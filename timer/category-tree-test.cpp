@@ -42,13 +42,13 @@ private:
 
   template <class Type, class Size>
   static void print_value(const category_node <Type, Size> &node) {
-    std::cout << node.data.value << "  ["
+    std::cerr << node.data.value << "  ["
               << node.data.size << "/"
               << node.total_size << "]";
     if (!node.low_child && !node.high_child) {
-      std::cout << " *";
+      std::cerr << " *";
     }
-    std::cout << std::endl;
+    std::cerr << std::endl;
   }
 };
 
