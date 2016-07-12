@@ -306,6 +306,8 @@ private:
   FRIEND_TEST(category_node_test, test_pivot_high_low_recursion_2_1);
   FRIEND_TEST(category_tree_test, integration_test);
 
+  friend class node_printer;
+
   bool validate_tree(std::function <bool(const category_node&)> validate) const {
     assert(validate);
     if (!validate(*this)) return false;

@@ -83,7 +83,7 @@ bool expand_escapes(std::string &escaped) {
   return true;
 }
 
-}
+} //namespace
 
 int main(int argc, char *argv[]) {
   action_timer <std::string> actions(4);
