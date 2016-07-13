@@ -6,11 +6,13 @@
 #include <memory>
 #include <random>
 #include <thread>
+#include <unordered_map>
 
 #include <time.h>
 
 #include "locking-container.hpp"
-#include "exponential-categorical.hpp"
+
+#include "category-tree.hpp"
 
 
 // The antithesis of thread-safe!
@@ -99,8 +101,8 @@ public:
 private:
   void thread_loop(unsigned int thread_number);
 
-  typedef lc::locking_container <exponential_categorical <Type>, lc::rw_lock>
-    locked_exponential_categorical;
+  typedef lc::locking_container <category_tree <Type, double>, lc::rw_lock>
+    locked_category_tree;
 
   typedef std::unordered_map <Type, generic_action> action_map;
   typedef lc::locking_container <action_map, lc::w_lock> locked_action_map;
@@ -112,13 +114,14 @@ private:
 
   std::default_random_engine generator;
   std::uniform_real_distribution <double> uniform;
+  std::exponential_distribution <double>  exponential;
 
   std::mutex               empty_lock;
   std::condition_variable  empty_wait;
 
   const unsigned int thread_count;
-  locked_exponential_categorical locked_categories;
-  locked_action_map              locked_actions;
+  locked_category_tree locked_categories;
+  locked_action_map    locked_actions;
 };
 
 
@@ -127,11 +130,11 @@ void action_timer <Type> ::set_category(const Type &category, double lambda) {
   auto category_write = locked_categories.get_write();
   assert(category_write);
   if (lambda > 0) {
-    category_write->set_category(category, lambda);
+    category_write->update_or_add(category, lambda);
     std::unique_lock <std::mutex> local_lock(empty_lock);
     empty_wait.notify_all();
   } else {
-    category_write->clear_category(category);
+    category_write->erase(category);
   }
 }
 
@@ -186,7 +189,7 @@ void action_timer <Type> ::thread_loop(unsigned int thread_number) {
 
   while (!destructor_called) {
     const double category_uniform = uniform(generator);
-    const double time_uniform     = uniform(generator);
+    const double time_exponential = exponential(generator);
 
     // NOTE: Category selection comes before sleep, so that the sleep
     // corresponds to the categories available when it starts. This makes the
@@ -197,7 +200,7 @@ void action_timer <Type> ::thread_loop(unsigned int thread_number) {
     auto category_read = locked_categories.get_read_auth(auth);
     assert(category_read);
 
-    if (category_read->empty()) {
+    if (category_read->get_total_size() == 0) {
       // NOTE: Failing to clear category_read will cause a deadlock!
       category_read.clear();
       assert(!category_read);
@@ -210,8 +213,8 @@ void action_timer <Type> ::thread_loop(unsigned int thread_number) {
     }
 
     // NOTE: Need to copy category to avoid a race condition!
-    const Type   category = category_read->uniform_to_category(category_uniform);
-    const double time     = category_read->uniform_to_time(time_uniform) * (double) thread_count;
+    const Type   category = category_read->locate(category_uniform * category_read->get_total_size());
+    const double time     = time_exponential / category_read->get_total_size() * (double) thread_count;
     category_read.clear();
     assert(!category_read);
 
