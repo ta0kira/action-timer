@@ -20,8 +20,7 @@
 // The antithesis of thread-safe!
 class precise_timer {
 public:
-  precise_timer(std::chrono::duration <double> granularity =
-                std::chrono::duration <double> (0.01));
+  precise_timer(double granularity = 0.01);
 
   void mark();
   void sleep_for(double time, std::function <bool()> cancel = nullptr);
