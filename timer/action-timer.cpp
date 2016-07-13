@@ -1,8 +1,7 @@
 #include "action-timer.hpp"
 
-const std::chrono::duration <double> precise_timer::sleep_granularity(0.01);
-
-precise_timer::precise_timer() : base_time() {
+precise_timer::precise_timer(std::chrono::duration <double> granularity) :
+  sleep_granularity(granularity), base_time() {
   this->mark();
 }
 

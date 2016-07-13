@@ -20,17 +20,18 @@
 // The antithesis of thread-safe!
 class precise_timer {
 public:
-  precise_timer();
+  precise_timer(std::chrono::duration <double> granularity =
+                std::chrono::duration <double> (0.01));
 
   void mark();
   void sleep_for(double time, std::function <bool()> cancel = nullptr);
 
+
+private:
   // The cancel callback is checked at this granularity during sleep_for, i.e.,
   // this is approximately the max latency for cancelation, with the expectation
   // being about half of this.
-  static const std::chrono::duration <double> sleep_granularity;
-
-private:
+  const std::chrono::duration <double> sleep_granularity;
   std::chrono::duration <double> base_time;
 };
 
