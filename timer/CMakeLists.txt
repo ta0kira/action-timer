@@ -11,7 +11,7 @@ add_executable(
 target_link_libraries(category-tree-test ${GTEST_LIBRARIES} pthread)
 
 add_executable(
-  exponential-printer
-  exponential-printer.cpp
+  poisson-printer
+  poisson-printer.cpp
   action-timer.cpp)
-target_link_libraries(exponential-printer pthread)
+target_link_libraries(poisson-printer pthread)

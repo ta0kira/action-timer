@@ -108,9 +108,9 @@ process_input() {
 
 cd "$(dirname "$0")" || exit 1
 
-cmake . && make exponential-printer || exit 1
+cmake . && make poisson-printer || exit 1
 
 {
   printf '%s\n' "${all_events[@]}"
   process_input
-} | ./exponential-printer
+} | ./poisson-printer
