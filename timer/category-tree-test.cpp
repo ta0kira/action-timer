@@ -209,6 +209,16 @@ TEST(category_node_test, erase_all_unordered) {
   EXPECT_EQ(nullptr, node);
 }
 
+TEST(category_node_test, test_remove_lowest_node_single) {
+  std::unique_ptr <string_node_type> node, removed;
+  string_node_type::update_or_add(node, "A", 2);
+  string_node_type::remove_lowest_node(node, removed);
+  EXPECT_EQ(nullptr, node);
+  EXPECT_NE(nullptr, removed);
+  EXPECT_EQ("A", removed->data.value);
+  EXPECT_EQ(1, removed->height);
+}
+
 TEST(category_node_test, test_remove_lowest_node_no_rebalance_1_0) {
   std::unique_ptr <string_node_type> node, removed;
   string_node_type::update_or_add(node, "B", 1);
@@ -261,6 +271,16 @@ TEST(category_node_test, test_remove_lowest_node_rebalance_1_2) {
   EXPECT_TRUE(node->validate_sized());
 }
 
+TEST(category_node_test, test_remove_highest_node_single) {
+  std::unique_ptr <string_node_type> node, removed;
+  string_node_type::update_or_add(node, "A", 2);
+  string_node_type::remove_highest_node(node, removed);
+  EXPECT_EQ(nullptr, node);
+  EXPECT_NE(nullptr, removed);
+  EXPECT_EQ("A", removed->data.value);
+  EXPECT_EQ(1, removed->height);
+}
+
 TEST(category_node_test, test_remove_highest_node_no_rebalance_0_1) {
   std::unique_ptr <string_node_type> node, removed;
   string_node_type::update_or_add(node, "B", 2);
@@ -311,6 +331,16 @@ TEST(category_node_test, test_remove_highest_node_rebalance_2_1) {
   EXPECT_TRUE(node->validate_balanced());
   EXPECT_TRUE(node->validate_sorted());
   EXPECT_TRUE(node->validate_sized());
+}
+
+TEST(category_node_test, test_remove_node_single) {
+  std::unique_ptr <string_node_type> node, removed;
+  string_node_type::update_or_add(node, "A", 2);
+  string_node_type::remove_node(node, removed);
+  EXPECT_EQ(nullptr, node);
+  EXPECT_NE(nullptr, removed);
+  EXPECT_EQ("A", removed->data.value);
+  EXPECT_EQ(1, removed->height);
 }
 
 TEST(category_node_test, test_remove_node_no_rebalance_low) {

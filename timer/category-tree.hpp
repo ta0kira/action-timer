@@ -291,14 +291,17 @@ private:
   FRIEND_TEST(category_node_test, test_insert_rebalance_ordered);
   FRIEND_TEST(category_node_test, test_insert_rebalance_unordered);
   FRIEND_TEST(category_node_test, erase_all_unordered);
+  FRIEND_TEST(category_node_test, test_remove_lowest_node_single);
   FRIEND_TEST(category_node_test, test_remove_lowest_node_no_rebalance_1_0);
   FRIEND_TEST(category_node_test, test_remove_lowest_node_no_rebalance_1_1);
   FRIEND_TEST(category_node_test, test_remove_lowest_node_no_rebalance_2_1);
   FRIEND_TEST(category_node_test, test_remove_lowest_node_rebalance_1_2);
+  FRIEND_TEST(category_node_test, test_remove_highest_node_single);
   FRIEND_TEST(category_node_test, test_remove_highest_node_no_rebalance_0_1);
   FRIEND_TEST(category_node_test, test_remove_highest_node_no_rebalance_1_1);
   FRIEND_TEST(category_node_test, test_remove_highest_node_no_rebalance_1_2);
   FRIEND_TEST(category_node_test, test_remove_highest_node_rebalance_2_1);
+  FRIEND_TEST(category_node_test, test_remove_node_single);
   FRIEND_TEST(category_node_test, test_remove_node_no_rebalance_low);
   FRIEND_TEST(category_node_test, test_remove_node_no_rebalance_high);
   FRIEND_TEST(category_node_test, test_remove_node_no_rebalance_low_low);
