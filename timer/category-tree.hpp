@@ -18,6 +18,10 @@ public:
     return root && root->category_exists(value);
   }
 
+  Size category_size(const Type &value) const {
+    return root? root->category_size(value) : Size();
+  }
+
   const Type &locate(Size size) const {
     assert(root && size >= Size() && size < this->get_total_size());
     return root->locate(size);
@@ -72,6 +76,16 @@ public:
       return high_child? high_child->category_exists(value) : false;
     }
     return false;
+  }
+
+  Size category_size(const Type &value) const {
+    if (data.value == value) return data.size;
+    if (value < data.value) {
+      return low_child?  low_child->category_size(value)  : Size();
+    } else {
+      return high_child? high_child->category_size(value) : Size();
+    }
+    return Size();
   }
 
   // The assumption is that 0 <= size < total_size, but it isn't enforced, due

@@ -68,6 +68,38 @@ TEST(category_node_test, test_exists_child) {
   EXPECT_FALSE(node.category_exists("D"));
 }
 
+TEST(category_node_test, test_update_size) {
+  string_node_type node("B", 1);
+  node.low_child.reset(new string_node_type("A", 2));
+  node.high_child.reset(new string_node_type("C", 3));
+  EXPECT_EQ(0, node.total_size);
+  node.update_size();
+  EXPECT_EQ(1, node.total_size);
+  EXPECT_EQ(0, node.low_child->total_size);
+  EXPECT_EQ(0, node.high_child->total_size);
+  node.low_child->update_size();
+  node.high_child->update_size();
+  node.update_size();
+  EXPECT_EQ(6, node.total_size);
+  EXPECT_EQ(2, node.low_child->total_size);
+  EXPECT_EQ(3, node.high_child->total_size);
+}
+
+TEST(category_node_test, test_category_size) {
+  std::unique_ptr <string_node_type> node;
+  string_node_type::update_or_add(node, "B", 2);
+  string_node_type::update_or_add(node, "A", 1);
+  string_node_type::update_or_add(node, "D", 4);
+  string_node_type::update_or_add(node, "C", 3);
+  EXPECT_NE(nullptr, node);
+  node_printer::print_node(*node);
+  EXPECT_EQ(node->category_size("A"), 1);
+  EXPECT_EQ(node->category_size("B"), 2);
+  EXPECT_EQ(node->category_size("C"), 3);
+  EXPECT_EQ(node->category_size("D"), 4);
+  EXPECT_EQ(node->category_size("E"), 0);
+}
+
 TEST(category_node_test, test_locate) {
   std::unique_ptr <string_node_type> node;
   string_node_type::update_or_add(node, "B", 2);
@@ -86,23 +118,6 @@ TEST(category_node_test, test_locate) {
   EXPECT_EQ("D", node->locate(7));
   EXPECT_EQ("D", node->locate(8));
   EXPECT_EQ("D", node->locate(9));
-}
-
-TEST(category_node_test, test_update_size) {
-  string_node_type node("B", 1);
-  node.low_child.reset(new string_node_type("A", 2));
-  node.high_child.reset(new string_node_type("C", 3));
-  EXPECT_EQ(0, node.total_size);
-  node.update_size();
-  EXPECT_EQ(1, node.total_size);
-  EXPECT_EQ(0, node.low_child->total_size);
-  EXPECT_EQ(0, node.high_child->total_size);
-  node.low_child->update_size();
-  node.high_child->update_size();
-  node.update_size();
-  EXPECT_EQ(6, node.total_size);
-  EXPECT_EQ(2, node.low_child->total_size);
-  EXPECT_EQ(3, node.high_child->total_size);
 }
 
 TEST(category_node_test, test_insert_no_rebalance) {
