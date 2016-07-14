@@ -77,6 +77,7 @@ int main(int argc, char *argv[]) {
   }
 
   action_timer <int> actions;
+  actions.set_timer_factory([] { return new precise_timer(0.01, 0.002); });
   actions.set_category(0, lambda);
   time_printer printer(count, [&actions] { actions.async_stop(); });
   std::unique_ptr <abstract_action> action(new direct_action([&printer] { printer.action(); }));

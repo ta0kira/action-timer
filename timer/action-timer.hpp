@@ -17,8 +17,13 @@
 #include "category-tree.hpp"
 
 
+struct sleep_timer {
+  virtual void sleep_for(double time, std::function <bool()> cancel = nullptr) = 0;
+  virtual ~sleep_timer() = default;
+};
+
 // The antithesis of thread-safe!
-class precise_timer {
+class precise_timer : public sleep_timer {
 public:
   // The cancel callback is checked at this granularity during sleep_for, i.e.,
   // this is approximately the max latency for cancelation, with the expectation
@@ -29,11 +34,10 @@ public:
   // For time remainders below max_precision, a spinlock will be used instead of
   // a sleep, to avoid excessive latency.
   explicit precise_timer(double cancel_granularity = 0.01,
-                         double max_precision = 0.002);
+                         double max_precision = 0.0);
 
   void mark();
-  void sleep_for(double time, std::function <bool()> cancel = nullptr);
-
+  void sleep_for(double time, std::function <bool()> cancel = nullptr) override;
 
 private:
   void spinlock_finish() const;
@@ -112,6 +116,8 @@ public:
   explicit action_timer(unsigned int threads = 1, int seed = time(nullptr)) :
   thread_count(threads), stop_called(true), stopped(true), generator(seed) {}
 
+  void set_timer_factory(std::function <sleep_timer*()> factory);
+
   void set_category(const Type &category, double lambda);
 
   // Ideally, thread_action (or similar) should be used so that the amount of
@@ -150,6 +156,8 @@ private:
   const unsigned int thread_count;
   std::list <std::unique_ptr <std::thread>> threads;
 
+  std::function <sleep_timer*()> timer_factory;
+
   std::mutex               state_lock;
   std::condition_variable  state_wait;
   std::atomic <bool> stop_called, stopped;
@@ -162,6 +170,11 @@ private:
   locked_action_map    locked_actions;
 };
 
+
+template <class Type>
+void action_timer <Type> ::set_timer_factory(std::function <sleep_timer*()> factory) {
+  timer_factory = factory;
+}
 
 template <class Type>
 void action_timer <Type> ::set_category(const Type &category, double lambda) {
@@ -269,7 +282,7 @@ template <class Type>
 void action_timer <Type> ::thread_loop(unsigned int thread_number) {
   lc::lock_auth_base::auth_type auth(new lc::lock_auth <lc::rw_lock>);
   // NOTE: This *must* be unique to this thread!
-  precise_timer timer;
+  std::unique_ptr <sleep_timer> timer(timer_factory? timer_factory() : new precise_timer);
 
   while (!stop_called) {
     const double category_uniform = uniform(generator);
@@ -304,7 +317,7 @@ void action_timer <Type> ::thread_loop(unsigned int thread_number) {
     category_read.clear();
     assert(!category_read);
 
-    timer.sleep_for(time, [this] { return (bool) stop_called; });
+    timer->sleep_for(time, [this] { return (bool) stop_called; });
     if (stop_called) {
       break;
     }
