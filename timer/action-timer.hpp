@@ -132,11 +132,15 @@ private:
 
 template <class Type>
 void action_timer <Type> ::set_category(const Type &category, double lambda) {
-  auto category_write = locked_categories.get_write();
+  lc::lock_auth_base::auth_type auth(new lc::lock_auth <lc::w_lock>);
+  auto category_write = locked_categories.get_write_auth(auth);
   assert(category_write);
   if (lambda > 0) {
     category_write->update_category(category, lambda);
     category_write.clear();
+    // Manually perform the check that get_write_auth would perform if locking
+    // empty_lock was done by locking-container.
+    assert(auth->guess_write_allowed(true, true));
     std::unique_lock <std::mutex> local_lock(empty_lock);
     empty_wait.notify_all();
   } else {
@@ -212,7 +216,9 @@ void action_timer <Type> ::thread_loop(unsigned int thread_number) {
     if (category_read->get_total_size() == 0.0) {
       // NOTE: Failing to clear category_read will cause a deadlock!
       category_read.clear();
-      assert(!category_read);
+      // Manually perform the check that get_write_auth would perform if locking
+      // empty_lock was done by locking-container.
+      assert(auth->guess_write_allowed(true, true));
       std::unique_lock <std::mutex> local_lock(empty_lock);
       if (destructor_called) {
         break;
