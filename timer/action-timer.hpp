@@ -132,11 +132,11 @@ void action_timer <Type> ::set_category(const Type &category, double lambda) {
   auto category_write = locked_categories.get_write();
   assert(category_write);
   if (lambda > 0) {
-    category_write->update_or_add(category, lambda);
+    category_write->update_category(category, lambda);
     std::unique_lock <std::mutex> local_lock(empty_lock);
     empty_wait.notify_all();
   } else {
-    category_write->erase(category);
+    category_write->erase_category(category);
   }
 }
 

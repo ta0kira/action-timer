@@ -14,12 +14,12 @@ class category_tree {
 public:
   using node_type = category_node <Type, Size>;
 
-  bool category_exists(const Type &value) const {
-    return root && root->category_exists(value);
+  bool category_exists(const Type &category) const {
+    return root && root->category_exists(category);
   }
 
-  Size category_size(const Type &value) const {
-    return root? root->category_size(value) : Size();
+  Size category_size(const Type &category) const {
+    return root? root->category_size(category) : Size();
   }
 
   const Type &locate(Size size) const {
@@ -27,12 +27,12 @@ public:
     return root->locate(size);
   }
 
-  void update_or_add(const Type &value, Size new_size) {
-    node_type::update_or_add(root, value, new_size);
+  void update_category(const Type &category, Size new_size) {
+    node_type::update_category(root, category, new_size);
   }
 
-  void erase(const Type &value) {
-    node_type::erase(root, value);
+  void erase_category(const Type &category) {
+    node_type::erase_category(root, category);
   }
 
   Size get_total_size() const {
@@ -48,42 +48,33 @@ private:
 };
 
 template <class Type, class Size>
-struct category {
-  category(const Type &new_value, Size new_size) :
-  value(new_value), size(new_size) {}
-
-  const Type value;
-  Size       size;
-};
-
-template <class Type, class Size>
 class category_node {
 public:
   using optional_node = std::unique_ptr <category_node>;
 
-  category_node(const Type &new_value, Size new_size) :
-  height(1), total_size(), data(new_value, new_size) {}
+  category_node(const Type &new_category, Size new_size) :
+  category(new_category), size(new_size), height(1), total_size() {}
 
   Size get_total_size() const {
     return total_size;
   }
 
-  bool category_exists(const Type &value) const {
-    if (data.value == value) return true;
-    if (value < data.value) {
-      return low_child?  low_child->category_exists(value)  : false;
+  bool category_exists(const Type &check_category) const {
+    if (check_category == category) return true;
+    if (check_category < category) {
+      return low_child?  low_child->category_exists(check_category)  : false;
     } else {
-      return high_child? high_child->category_exists(value) : false;
+      return high_child? high_child->category_exists(check_category) : false;
     }
     return false;
   }
 
-  Size category_size(const Type &value) const {
-    if (data.value == value) return data.size;
-    if (value < data.value) {
-      return low_child?  low_child->category_size(value)  : Size();
+  Size category_size(const Type &check_category) const {
+    if (check_category == category) return size;
+    if (check_category < category) {
+      return low_child?  low_child->category_size(check_category)  : Size();
     } else {
-      return high_child? high_child->category_size(value) : Size();
+      return high_child? high_child->category_size(check_category) : Size();
     }
     return Size();
   }
@@ -92,53 +83,53 @@ public:
   // to potential precision problems when combining/splitting intervals. Note
   // that the upper end is open, which allows this to work as expected with
   // integer size types.
-  const Type &locate(Size size) const {
+  const Type &locate(Size check_size) const {
     // Interval is divided into three parts: low, self, high.
-    if (low_child && size < low_child->total_size) {
-      return low_child->locate(size);
+    if (low_child && check_size < low_child->total_size) {
+      return low_child->locate(check_size);
     }
     // Not in first part => move to second.
-    if (low_child) size -= low_child->total_size;
+    if (low_child) check_size -= low_child->total_size;
     // NOTE: Checking high_child prevents problems below if there is a precision
-    // error that makes size >= data.size.
-    if (!high_child || size < data.size) {
-      return data.value;
+    // error that makes size >= size.
+    if (!high_child || check_size < size) {
+      return category;
     }
     // Not in second part => move to third.
-    size -= data.size;
-    return high_child->locate(size);
+    check_size -= size;
+    return high_child->locate(check_size);
   }
 
-  static void update_or_add(optional_node &current, const Type &new_value, Size new_size) {
+  static void update_category(optional_node &current, const Type &new_category, Size new_size) {
     if (!current) {
-      current.reset(new category_node(new_value, new_size));
-    } else if (current->data.value == new_value) {
-      current->data.size = new_size;
-    } else if (new_value < current->data.value) {
-      update_or_add(current->low_child, new_value, new_size);
+      current.reset(new category_node(new_category, new_size));
+    } else if (current->category == new_category) {
+      current->size = new_size;
+    } else if (new_category < current->category) {
+      update_category(current->low_child, new_category, new_size);
     } else {
-      update_or_add(current->high_child, new_value, new_size);
+      update_category(current->high_child, new_category, new_size);
     }
     update_and_rebalance(current);
   }
 
-  static void erase(optional_node &current, const Type &new_value) {
+  static void erase_category(optional_node &current, const Type &new_category) {
     optional_node discard;
     if (!current) {
       return;
-    } else if (current->data.value == new_value) {
+    } else if (current->category == new_category) {
       remove_node(current, discard);
-    } else if (new_value < current->data.value) {
-      erase(current->low_child, new_value);
+    } else if (new_category < current->category) {
+      erase_category(current->low_child, new_category);
     } else {
-      erase(current->high_child, new_value);
+      erase_category(current->high_child, new_category);
     }
     update_and_rebalance(current);
   }
 
 private:
   void update_size() {
-    total_size = data.size;
+    total_size = size;
     if (low_child)  total_size += low_child->total_size;
     if (high_child) total_size += high_child->total_size;
   }
@@ -149,7 +140,7 @@ private:
     height = std::max(low_height, high_height) + 1;
   }
 
-  int balance() {
+  int get_balance() {
     const int low_height  = low_child?  low_child->height  : 0;
     const int high_height = high_child? high_child->height : 0;
     return high_height - low_height;
@@ -159,10 +150,10 @@ private:
     if (current) {
       current->update_size();
       current->update_height();
-      if (current->balance() < -1) {
+      if (current->get_balance() < -1) {
         pivot_high(current);
       }
-      if (current->balance() > 1) {
+      if (current->get_balance() > 1) {
         pivot_low(current);
       }
     }
@@ -171,7 +162,7 @@ private:
   static void pivot_low(optional_node &current) {
     assert(current->high_child);
     // Make sure that high_child has non-negative balance.
-    if (current->high_child->balance() < 0) {
+    if (current->high_child->get_balance() < 0) {
       pivot_high(current->high_child);
     }
     // Pivot.
@@ -192,7 +183,7 @@ private:
   static void pivot_high(optional_node &current) {
     assert(current->low_child);
     // Make sure that low_child has non-positive balance.
-    if (current->low_child->balance() > 0) {
+    if (current->low_child->get_balance() > 0) {
       pivot_low(current->low_child);
     }
     // Pivot.
@@ -229,7 +220,7 @@ private:
       return;
     }
     optional_node new_parent;
-    if (current->balance() < 0) {
+    if (current->get_balance() < 0) {
       remove_highest_node(current->low_child, new_parent);
       assert(new_parent);
     } else {
@@ -277,10 +268,11 @@ private:
     }
   }
 
+  const Type category;
+  Size       size;
+
   int  height;
   Size total_size;
-
-  category <Type, Size> data;
 
   optional_node low_child, high_child;
 
@@ -290,7 +282,7 @@ private:
   FRIEND_TEST(category_node_test, test_insert_no_rebalance);
   FRIEND_TEST(category_node_test, test_insert_rebalance_ordered);
   FRIEND_TEST(category_node_test, test_insert_rebalance_unordered);
-  FRIEND_TEST(category_node_test, erase_all_unordered);
+  FRIEND_TEST(category_node_test, erase_category_all_unordered);
   FRIEND_TEST(category_node_test, test_remove_lowest_node_single);
   FRIEND_TEST(category_node_test, test_remove_lowest_node_no_rebalance_1_0);
   FRIEND_TEST(category_node_test, test_remove_lowest_node_no_rebalance_1_1);
@@ -328,8 +320,8 @@ private:
 
   bool validate_sorted() const {
     return this->validate_tree([](const category_node &node) {
-      if (node.low_child  && node.low_child->data.value  >= node.data.value) return false;
-      if (node.high_child && node.high_child->data.value <= node.data.value) return false;
+      if (node.low_child  && node.low_child->category  >= node.category) return false;
+      if (node.high_child && node.high_child->category <= node.category) return false;
       return true;
     });
   }
@@ -347,7 +339,7 @@ private:
   bool validate_sized() const {
     return this->validate_tree([](const category_node &node) {
       // NOTE: This must match update_size to avoid precision errors!
-      Size actual_size = node.data.size;
+      Size actual_size = node.size;
       if (node.low_child)  actual_size += node.low_child->total_size;
       if (node.high_child) actual_size += node.high_child->total_size;
       return node.total_size == actual_size;
