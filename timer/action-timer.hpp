@@ -110,7 +110,7 @@ private:
     locked_category_tree;
 
   typedef std::unordered_map <Type, generic_action> action_map;
-  typedef lc::locking_container <action_map, lc::w_lock> locked_action_map;
+  typedef lc::locking_container <action_map, lc::rw_lock> locked_action_map;
 
   // NOTE: All members besides threads need to be thread-safe!
 
@@ -152,7 +152,9 @@ void action_timer <Type> ::set_action(const Type &category, generic_action actio
   auto action_write = locked_actions.get_write();
   assert(action_write);
   if (action) {
-    (*action_write)[category].reset(action.release());
+    // NOTE: swap is used here so that destruction is called after
+    // locked_actions is unlocked, in case the destructor is non-trivial.
+    (*action_write)[category].swap(action);
   } else {
     action_write->erase(category);
   }
@@ -230,10 +232,10 @@ void action_timer <Type> ::thread_loop(unsigned int thread_number) {
       break;
     }
 
-    auto action_write = locked_actions.get_write_auth(auth);
-    assert(action_write);
-    auto existing = action_write->find(category);
-    if (existing != action_write->end() && existing->second) {
+    auto action_read = locked_actions.get_read_auth(auth);
+    assert(action_read);
+    auto existing = action_read->find(category);
+    if (existing != action_read->end() && existing->second) {
       existing->second->trigger_action();
     }
   }
