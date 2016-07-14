@@ -115,10 +115,14 @@ public:
   void set_action(const Type &category, generic_action action);
 
   void start();
-  bool is_stopped() const;
-  bool is_stopping() const;
+
   void stop();
+  bool is_stopped() const;
+  void wait_stopped();
+
   void passive_stop();
+  bool is_stopping() const;
+  void wait_stopping();
 
   // NOTE: This is non-deterministic, since it waits for the threads to reach an
   // exit point, e.g., after the ongoing sleep. Sleeps are subdivided to allow
@@ -139,15 +143,15 @@ private:
   // NOTE: All members besides threads need to be thread-safe!
 
   const unsigned int thread_count;
-  std::atomic <bool> stop_called, stopped;
   std::list <std::unique_ptr <std::thread>> threads;
+
+  std::mutex               state_lock;
+  std::condition_variable  state_wait;
+  std::atomic <bool> stop_called, stopped;
 
   std::default_random_engine generator;
   std::uniform_real_distribution <double> uniform;
   std::exponential_distribution <double>  exponential;
-
-  std::mutex               empty_lock;
-  std::condition_variable  empty_wait;
 
   locked_category_tree locked_categories;
   locked_action_map    locked_actions;
@@ -163,10 +167,10 @@ void action_timer <Type> ::set_category(const Type &category, double lambda) {
     category_write->update_category(category, lambda);
     category_write.clear();
     // Manually perform the check that get_write_auth would perform if locking
-    // empty_lock was done by locking-container.
+    // state_lock was done by locking-container.
     assert(auth->guess_write_allowed(true, true));
-    std::unique_lock <std::mutex> local_lock(empty_lock);
-    empty_wait.notify_all();
+    std::unique_lock <std::mutex> local_lock(state_lock);
+    state_wait.notify_all();
   } else {
     category_write->erase_category(category);
   }
@@ -200,8 +204,31 @@ void action_timer <Type> ::start() {
 }
 
 template <class Type>
+void action_timer <Type> ::stop() {
+  this->passive_stop();
+  this->join();
+}
+
+template <class Type>
 bool action_timer <Type> ::is_stopped() const {
   return stopped;
+}
+
+template <class Type>
+void action_timer <Type> ::wait_stopped() {
+  while (!this->is_stopped()) {
+    std::unique_lock <std::mutex> local_lock(state_lock);
+    state_wait.wait(local_lock);
+  }
+}
+
+template <class Type>
+void action_timer <Type> ::passive_stop() {
+  {
+    std::unique_lock <std::mutex> local_lock(state_lock);
+    stop_called = true;
+    state_wait.notify_all();
+  }
 }
 
 template <class Type>
@@ -210,17 +237,10 @@ bool action_timer <Type> ::is_stopping() const {
 }
 
 template <class Type>
-void action_timer <Type> ::stop() {
-  this->passive_stop();
-  this->join();
-}
-
-template <class Type>
-void action_timer <Type> ::passive_stop() {
-  {
-    std::unique_lock <std::mutex> local_lock(empty_lock);
-    stop_called = true;
-    empty_wait.notify_all();
+void action_timer <Type> ::wait_stopping() {
+  while (!this->is_stopping()) {
+    std::unique_lock <std::mutex> local_lock(state_lock);
+    state_wait.wait(local_lock);
   }
 }
 
@@ -263,13 +283,13 @@ void action_timer <Type> ::thread_loop(unsigned int thread_number) {
       // NOTE: Failing to clear category_read will cause a deadlock!
       category_read.clear();
       // Manually perform the check that get_write_auth would perform if locking
-      // empty_lock was done by locking-container.
+      // state_lock was done by locking-container.
       assert(auth->guess_write_allowed(true, true));
-      std::unique_lock <std::mutex> local_lock(empty_lock);
+      std::unique_lock <std::mutex> local_lock(state_lock);
       if (stop_called) {
         break;
       }
-      empty_wait.wait(local_lock);
+      state_wait.wait(local_lock);
       continue;
     }
 

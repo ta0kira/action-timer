@@ -77,7 +77,5 @@ int main(int argc, char *argv[]) {
   actions.set_action(0, std::move(action));
   actions.start();
 
-  while (!actions.is_stopping()) {
-    std::this_thread::sleep_for(std::chrono::duration <double> (0.5));
-  }
+  actions.wait_stopping();
 }
