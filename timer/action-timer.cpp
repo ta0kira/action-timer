@@ -70,3 +70,22 @@ void thread_action::thread_loop() {
     }
   }
 }
+
+void direct_action::set_action(std::function <void()> new_action) {
+  auto write_action = action.get_write();
+  assert(write_action);
+  write_action->swap(new_action);
+}
+
+void direct_action::trigger_action() {
+  auto read_action = action.get_write();
+  assert(read_action);
+  if (*read_action) {
+    (*read_action)();
+  }
+}
+
+// NOTE: This waits for an ongoing action to complete.
+direct_action::~direct_action() {
+  auto write_action = action.get_write();
+}

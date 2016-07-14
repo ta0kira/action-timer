@@ -50,18 +50,18 @@ public:
   // NOTE: A callback is used rather than a virtual function to avoid a race
   // condition when destructing while trying to execute the action.
 
-  thread_action(std::function <void()> new_action = nullptr) :
-  destructor_called(), action_waiting(), action(new_action) {}
+  explicit thread_action(std::function <void()> new_action = nullptr) :
+  destructor_called(false), action_waiting(), action(new_action) {}
 
   void set_action(std::function <void()> new_action);
-  void start();
-  void trigger_action();
+  void start() override;
+  void trigger_action() override;
 
   // NOTE: This waits for the thread to reach an exit point, which could result
   // in waiting for the current action to finish executing. The consequences
   // should be no worse than the action being executed. For this reason, the
   // action shouldn't block forever for an reason.
-  ~thread_action();
+  ~thread_action() override;
 
 private:
   void thread_loop();
@@ -76,6 +76,25 @@ private:
   std::condition_variable  action_wait;
 };
 
+// Thread-safe.
+class direct_action : public abstract_action {
+public:
+  explicit direct_action(std::function <void()> new_action = nullptr) :
+  action(new_action) {}
+
+  void set_action(std::function <void()> new_action);
+  void start() override {}
+  void trigger_action() override;
+
+  // NOTE: This waits for an ongoing action to complete.
+  ~direct_action() override;
+
+private:
+  typedef lc::locking_container <std::function <void()>, lc::rw_lock> locked_action;
+
+  locked_action action;
+};
+
 template <class Type>
 class action_timer {
 public:
@@ -86,7 +105,7 @@ public:
   // multiplied by n, which decreases the ratio of overhead to actual sleeping
   // time, which allows shorter sleeps to be more accurate.
   explicit action_timer(unsigned int threads = 1, int seed = time(nullptr)) :
-  destructor_called(false), generator(seed), thread_count(threads) {}
+  thread_count(threads), stop_called(true), stopped(true), generator(seed) {}
 
   void set_category(const Type &category, double lambda);
 
@@ -96,7 +115,10 @@ public:
   void set_action(const Type &category, generic_action action);
 
   void start();
-  void join();
+  bool is_stopped() const;
+  bool is_stopping() const;
+  void stop();
+  void passive_stop();
 
   // NOTE: This is non-deterministic, since it waits for the threads to reach an
   // exit point, e.g., after the ongoing sleep. Sleeps are subdivided to allow
@@ -104,6 +126,8 @@ public:
   ~action_timer();
 
 private:
+  void join();
+
   void thread_loop(unsigned int thread_number);
 
   typedef lc::locking_container <category_tree <Type, double>, lc::rw_lock>
@@ -114,7 +138,8 @@ private:
 
   // NOTE: All members besides threads need to be thread-safe!
 
-  std::atomic <bool> destructor_called;
+  const unsigned int thread_count;
+  std::atomic <bool> stop_called, stopped;
   std::list <std::unique_ptr <std::thread>> threads;
 
   std::default_random_engine generator;
@@ -124,7 +149,6 @@ private:
   std::mutex               empty_lock;
   std::condition_variable  empty_wait;
 
-  const unsigned int thread_count;
   locked_category_tree locked_categories;
   locked_action_map    locked_actions;
 };
@@ -166,6 +190,8 @@ void action_timer <Type> ::set_action(const Type &category, generic_action actio
 
 template <class Type>
 void action_timer <Type> ::start() {
+  assert(this->is_stopped());
+  stopped = stop_called = false;
   if (threads.empty()) {
     for (unsigned int i = 0; i < thread_count; ++i) {
       threads.emplace_back(new std::thread([this,i] { this->thread_loop(i); }));
@@ -174,24 +200,44 @@ void action_timer <Type> ::start() {
 }
 
 template <class Type>
-void action_timer <Type> ::join() {
-  for (auto &thread : threads) {
-    assert(thread);
-    thread->join();
+bool action_timer <Type> ::is_stopped() const {
+  return stopped;
+}
+
+template <class Type>
+bool action_timer <Type> ::is_stopping() const {
+  return stop_called;
+}
+
+template <class Type>
+void action_timer <Type> ::stop() {
+  this->passive_stop();
+  this->join();
+}
+
+template <class Type>
+void action_timer <Type> ::passive_stop() {
+  {
+    std::unique_lock <std::mutex> local_lock(empty_lock);
+    stop_called = true;
+    empty_wait.notify_all();
   }
 }
 
 template <class Type>
 action_timer <Type> ::~action_timer() {
-  {
-    std::unique_lock <std::mutex> local_lock(empty_lock);
-    destructor_called = true;
-    empty_wait.notify_all();
+  this->stop();
+}
+
+template <class Type>
+void action_timer <Type> ::join() {
+  while (!threads.empty()) {
+    assert(threads.front());
+    assert(std::this_thread::get_id() != threads.front()->get_id());
+    threads.front()->join();
+    threads.pop_front();
   }
-  for (auto &thread : threads) {
-    assert(thread);
-    thread->join();
-  }
+  stopped = true;
 }
 
 template <class Type>
@@ -200,7 +246,7 @@ void action_timer <Type> ::thread_loop(unsigned int thread_number) {
   // NOTE: This *must* be unique to this thread!
   precise_timer timer;
 
-  while (!destructor_called) {
+  while (!stop_called) {
     const double category_uniform = uniform(generator);
     const double time_exponential = exponential(generator);
 
@@ -220,7 +266,7 @@ void action_timer <Type> ::thread_loop(unsigned int thread_number) {
       // empty_lock was done by locking-container.
       assert(auth->guess_write_allowed(true, true));
       std::unique_lock <std::mutex> local_lock(empty_lock);
-      if (destructor_called) {
+      if (stop_called) {
         break;
       }
       empty_wait.wait(local_lock);
@@ -233,8 +279,8 @@ void action_timer <Type> ::thread_loop(unsigned int thread_number) {
     category_read.clear();
     assert(!category_read);
 
-    timer.sleep_for(time, [this] { return (bool) destructor_called; });
-    if (destructor_called) {
+    timer.sleep_for(time, [this] { return (bool) stop_called; });
+    if (stop_called) {
       break;
     }
 
