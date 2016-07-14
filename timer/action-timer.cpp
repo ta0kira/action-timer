@@ -1,7 +1,7 @@
 #include "action-timer.hpp"
 
-precise_timer::precise_timer(double granularity) :
-  sleep_granularity(std::chrono::duration <double> (granularity)), base_time() {
+precise_timer::precise_timer(double cancel_granularity) :
+  sleep_granularity(std::chrono::duration <double> (cancel_granularity)), base_time() {
   this->mark();
 }
 
@@ -13,8 +13,9 @@ void precise_timer::mark() {
 void precise_timer::sleep_for(double time, std::function <bool()> cancel) {
   const std::chrono::duration <double> target_duration(time);
   base_time += target_duration;
+  bool canceled = false;
 
-  while (!cancel || !cancel()) {
+  for (; !canceled; canceled = cancel && cancel()) {
     const auto current_time = std::chrono::duration_cast <std::chrono::duration <double>> (
       std::chrono::high_resolution_clock::now().time_since_epoch());
     if (base_time - current_time < sleep_granularity) {
@@ -23,6 +24,10 @@ void precise_timer::sleep_for(double time, std::function <bool()> cancel) {
     } else {
       std::this_thread::sleep_for(sleep_granularity);
     }
+  }
+
+  if (canceled) {
+    this->mark();
   }
 }
 

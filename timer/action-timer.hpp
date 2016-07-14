@@ -20,16 +20,19 @@
 // The antithesis of thread-safe!
 class precise_timer {
 public:
-  precise_timer(double granularity = 0.01);
+  // The cancel callback is checked at this granularity during sleep_for, i.e.,
+  // this is approximately the max latency for cancelation, with the expectation
+  // being about half of this. Note, however, this is *not* the precision of the
+  // timer! Sleeps will be divided into intervals, with the last being truncated
+  // as appropriate, e.g., 0.025 becomes 0.01, 0.01, 0.005, making adjustments
+  // for processing latency.
+  precise_timer(double cancel_granularity = 0.01);
 
   void mark();
   void sleep_for(double time, std::function <bool()> cancel = nullptr);
 
 
 private:
-  // The cancel callback is checked at this granularity during sleep_for, i.e.,
-  // this is approximately the max latency for cancelation, with the expectation
-  // being about half of this.
   const std::chrono::duration <double> sleep_granularity;
   std::chrono::duration <double> base_time;
 };
@@ -188,6 +191,7 @@ action_timer <Type> ::~action_timer() {
 template <class Type>
 void action_timer <Type> ::thread_loop(unsigned int thread_number) {
   lc::lock_auth_base::auth_type auth(new lc::lock_auth <lc::rw_lock>);
+  // NOTE: This *must* be unique to this thread!
   precise_timer timer;
 
   while (!destructor_called) {
@@ -203,7 +207,7 @@ void action_timer <Type> ::thread_loop(unsigned int thread_number) {
     auto category_read = locked_categories.get_read_auth(auth);
     assert(category_read);
 
-    if (category_read->get_total_size() == 0) {
+    if (category_read->get_total_size() == 0.0) {
       // NOTE: Failing to clear category_read will cause a deadlock!
       category_read.clear();
       assert(!category_read);
