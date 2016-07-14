@@ -1,7 +1,9 @@
 #include "action-timer.hpp"
 
-precise_timer::precise_timer(double cancel_granularity) :
-  sleep_granularity(std::chrono::duration <double> (cancel_granularity)), base_time() {
+precise_timer::precise_timer(double cancel_granularity,
+                             double max_precision) :
+  sleep_granularity(std::chrono::duration <double> (cancel_granularity)),
+  spinlock_limit(std::chrono::duration <double> (max_precision)), base_time() {
   this->mark();
 }
 
@@ -18,7 +20,10 @@ void precise_timer::sleep_for(double time, std::function <bool()> cancel) {
   for (; !canceled; canceled = cancel && cancel()) {
     const auto current_time = std::chrono::duration_cast <std::chrono::duration <double>> (
       std::chrono::high_resolution_clock::now().time_since_epoch());
-    if (base_time - current_time < sleep_granularity) {
+    if (base_time - current_time < spinlock_limit) {
+      this->spinlock_finish();
+      break;
+    } else if (base_time - current_time < sleep_granularity) {
       std::this_thread::sleep_for(base_time - current_time);
       break;
     } else {
@@ -28,6 +33,16 @@ void precise_timer::sleep_for(double time, std::function <bool()> cancel) {
 
   if (canceled) {
     this->mark();
+  }
+}
+
+void precise_timer::spinlock_finish() const {
+  while (true) {
+    const auto current_time = std::chrono::duration_cast <std::chrono::duration <double>> (
+      std::chrono::high_resolution_clock::now().time_since_epoch());
+    if (current_time >= base_time) {
+      break;
+    }
   }
 }
 

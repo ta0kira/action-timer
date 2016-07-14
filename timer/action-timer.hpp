@@ -26,14 +26,18 @@ public:
   // timer! Sleeps will be divided into intervals, with the last being truncated
   // as appropriate, e.g., 0.025 becomes 0.01, 0.01, 0.005, making adjustments
   // for processing latency.
-  precise_timer(double cancel_granularity = 0.01);
+  precise_timer(double cancel_granularity = 0.01,
+                double max_precision = 0.0002);
 
   void mark();
   void sleep_for(double time, std::function <bool()> cancel = nullptr);
 
 
 private:
+  void spinlock_finish() const;
+
   const std::chrono::duration <double> sleep_granularity;
+  const std::chrono::duration <double> spinlock_limit;
   std::chrono::duration <double> base_time;
 };
 
