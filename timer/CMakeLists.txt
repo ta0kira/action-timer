@@ -15,3 +15,9 @@ add_executable(
   poisson-printer.cpp
   action-timer.cpp)
 target_link_libraries(poisson-printer pthread)
+
+add_executable(
+  timer-test-data
+  timer-test-data.cpp
+  action-timer.cpp)
+target_link_libraries(timer-test-data pthread)
