@@ -73,7 +73,7 @@ int main(int argc, char *argv[]) {
 
   action_timer <int> actions;
   actions.set_category(0, lambda);
-  std::unique_ptr <abstract_action> action(new time_printer(count, [&actions] { actions.passive_stop(); }));
+  std::unique_ptr <abstract_action> action(new time_printer(count, [&actions] { actions.async_stop(); }));
   actions.set_action(0, std::move(action));
   actions.start();
 

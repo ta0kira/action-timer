@@ -20,14 +20,16 @@ void precise_timer::sleep_for(double time, std::function <bool()> cancel) {
   for (; !canceled; canceled = cancel && cancel()) {
     const auto current_time = std::chrono::duration_cast <std::chrono::duration <double>> (
       std::chrono::high_resolution_clock::now().time_since_epoch());
+    if (current_time >= base_time) {
+      break;
+    }
     if (base_time - current_time < spinlock_limit) {
       this->spinlock_finish();
       break;
     } else if (base_time - current_time < sleep_granularity) {
-      std::this_thread::sleep_for(base_time - current_time);
-      break;
+      std::this_thread::sleep_for((base_time - current_time) - spinlock_limit);
     } else {
-      std::this_thread::sleep_for(sleep_granularity);
+      std::this_thread::sleep_for(sleep_granularity - spinlock_limit);
     }
   }
 

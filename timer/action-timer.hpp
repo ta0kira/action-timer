@@ -26,8 +26,10 @@ public:
   // timer! Sleeps will be divided into intervals, with the last being truncated
   // as appropriate, e.g., 0.025 becomes 0.01, 0.01, 0.005, making adjustments
   // for processing latency.
-  precise_timer(double cancel_granularity = 0.01,
-                double max_precision = 0.0002);
+  // For time remainders below max_precision, a spinlock will be used instead of
+  // a sleep, to avoid excessive latency.
+  explicit precise_timer(double cancel_granularity = 0.01,
+                         double max_precision = 0.002);
 
   void mark();
   void sleep_for(double time, std::function <bool()> cancel = nullptr);
@@ -36,8 +38,7 @@ public:
 private:
   void spinlock_finish() const;
 
-  const std::chrono::duration <double> sleep_granularity;
-  const std::chrono::duration <double> spinlock_limit;
+  const std::chrono::duration <double> sleep_granularity, spinlock_limit;
   std::chrono::duration <double> base_time;
 };
 
@@ -124,7 +125,7 @@ public:
   bool is_stopped() const;
   void wait_stopped();
 
-  void passive_stop();
+  void async_stop();
   bool is_stopping() const;
   void wait_stopping();
 
@@ -209,7 +210,7 @@ void action_timer <Type> ::start() {
 
 template <class Type>
 void action_timer <Type> ::stop() {
-  this->passive_stop();
+  this->async_stop();
   this->join();
 }
 
@@ -227,7 +228,7 @@ void action_timer <Type> ::wait_stopped() {
 }
 
 template <class Type>
-void action_timer <Type> ::passive_stop() {
+void action_timer <Type> ::async_stop() {
   {
     std::unique_lock <std::mutex> local_lock(state_lock);
     stop_called = true;
