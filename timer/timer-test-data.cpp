@@ -1,5 +1,6 @@
 #include <functional>
 #include <iostream>
+#include <sstream>
 #include <utility>
 
 #include <stdio.h>
@@ -12,14 +13,16 @@
 
 namespace {
 
-class time_printer : public abstract_action {
+// Not thread-safe!
+class time_printer {
 public:
   time_printer(int count, std::function <void()> action) :
-  max_count(count), stop_action(action), start_time(get_current_time()) {}
+  max_count(count), stop_action(action), start_time(get_current_time()) {
+    output.setf(std::ios::scientific);
+    output.precision(10);
+  }
 
-  void start() override {}
-
-  void trigger_action() override {
+  void action() {
     if (max_count > 0) {
       print_time();
       --max_count;
@@ -30,10 +33,14 @@ public:
     }
   }
 
+  std::string get_output() const {
+    return output.str();
+  }
+
 private:
-  void print_time() const {
+  void print_time() {
     const auto current_time = get_current_time();
-    std::cout << (current_time - start_time).count() / 1000000.0 << std::endl;
+    output << (current_time - start_time).count() / 1000000.0 << std::endl;
   }
 
   static std::chrono::microseconds get_current_time() {
@@ -42,6 +49,7 @@ private:
   }
 
   int max_count;
+  std::ostringstream output;
   std::function <void()> stop_action;
   const std::chrono::microseconds start_time;
 };
@@ -53,9 +61,6 @@ int main(int argc, char *argv[]) {
     fprintf(stderr, "%s [lambda] [count]\n", argv[0]);
     return 1;
   }
-
-  std::cout.setf(std::ios::scientific);
-  std::cout.precision(10);
 
   double lambda = 1.0;
   int    count = 0;
@@ -73,9 +78,11 @@ int main(int argc, char *argv[]) {
 
   action_timer <int> actions;
   actions.set_category(0, lambda);
-  std::unique_ptr <abstract_action> action(new time_printer(count, [&actions] { actions.async_stop(); }));
+  time_printer printer(count, [&actions] { actions.async_stop(); });
+  std::unique_ptr <abstract_action> action(new direct_action([&printer] { printer.action(); }));
   actions.set_action(0, std::move(action));
   actions.start();
 
   actions.wait_stopping();
+  std::cout << printer.get_output();
 }
