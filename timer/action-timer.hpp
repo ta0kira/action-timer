@@ -25,14 +25,15 @@ struct sleep_timer {
 // The antithesis of thread-safe!
 class precise_timer : public sleep_timer {
 public:
-  // The cancel callback is checked at this granularity during sleep_for, i.e.,
-  // this is approximately the max latency for cancelation, with the expectation
-  // being about half of this. Note, however, this is *not* the precision of the
-  // timer! Sleeps will be divided into intervals, with the last being truncated
-  // as appropriate, e.g., 0.025 becomes 0.01, 0.01, 0.005, making adjustments
-  // for processing latency.
-  // For time remainders below min_sleep_size, a spinlock will be used instead
-  // of a sleep, to avoid excessive latency.
+  // cancel_granularity dictates how often the cancel callback passed to
+  // sleep_for will be called to check for cancelation. In general, you should
+  // not count on cancelation being ultra-fast; it's primarily intended for use
+  // with stopping threads in action_timer.
+  // min_sleep_size sets a lower limit on what sleep length will be handled with
+  // an actual sleep call. Below that limit, a spinlock will be used. Set this
+  // value to something other than zero if you need precise timing for sleeps
+  // that are shorter than your kernel's latency. (This is mostly a matter of
+  // experimentation.)
   explicit precise_timer(double cancel_granularity = 0.01,
                          double min_sleep_size = 0.0);
 
@@ -125,14 +126,28 @@ public:
   // actual execution of the action happening in a dedicated thread.
   void set_action(const Type &category, generic_action action);
 
+  // Start the timer threads. It's an error to call this when the threads are
+  // already running.
   void start();
 
+  // Stop all threads, and wait for them to all exit.
+  // NOTE: It's an error to call this from a thread that's owned by this timer,
+  // e.g., calling this from direct_action will cause a crash; use async_stop
+  // instead.
   void stop();
+  // All threads are stopped.
   bool is_stopped() const;
+  // Block until is_stopped is true. This is equivalent to join, except
+  // afterward the timer can be started again with start.
   void wait_stopped();
 
+  // Stop all threads, but don't wait. Use this if you want to stop the threads
+  // from a direct_action that's owned by this timer. Note that the threads
+  // aren't actually cleaned up until stop is called.
   void async_stop();
+  // Threads should be stopping, but might not all be stopped.
   bool is_stopping() const;
+  // Block until is_stopping is true.
   void wait_stopping();
 
   // NOTE: This is non-deterministic, since it waits for the threads to reach an
@@ -158,8 +173,8 @@ private:
 
   std::function <sleep_timer*()> timer_factory;
 
-  std::mutex               state_lock;
-  std::condition_variable  state_wait;
+  std::mutex              state_lock;
+  std::condition_variable state_wait;
   std::atomic <bool> stop_called, stopped;
 
   std::default_random_engine generator;

@@ -90,5 +90,6 @@ int main(int argc, char *argv[]) {
   actions.start();
 
   actions.wait_stopping();
+  actions.stop();
   std::cout << printer.get_output();
 }
