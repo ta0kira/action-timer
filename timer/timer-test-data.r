@@ -16,10 +16,16 @@ for (log.min.sleep in 3:6) {
   data.raw <- system(command,intern=TRUE)
   data <- data.frame(do.call(rbind,lapply(data.raw,function(x) as.numeric(strsplit(x,',')[[1]]))))
   names(data) <- c('expected','actual')
-  data$diff <- data$expected-data$actual
+  data$error <- data$expected-data$actual
 
-  r.squared <- cor(data)^2
-  write(capture.output(print(r.squared)),file=standard_out)
+  # NOTE: The mean isn't subtracted here, since they're supposed to be
+  data.mat <- as.matrix(data)
+  data.norm <- data.mat%*%diag(1/sqrt(colSums(data.mat^2)))
+  expected.vs.actual <- (t(data.norm[,1])%*%data.norm[,2])^2
+  write(paste('r-squared expected vs actual:',format(expected.vs.actual)),file=standard_out)
+
+  actual.vs.error <- cor(data$actual,data$error)^2
+  write(paste('r-squared actual vs. error:',format(actual.vs.error)),file=standard_out)
 
   png(paste('timer-data-plot',log.min.sleep,'.png',sep=''),width=800,height=800)
   plot(data[c(1,2)],pch='.',xlim=c(0,quantile(data$expected,0.99)),ylim=c(0,quantile(data$actual,0.99)),asp=1)
