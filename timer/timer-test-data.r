@@ -18,18 +18,21 @@ for (log.min.sleep in 2:6) {
   names(data) <- c('expected','actual')
   data$error <- data$expected-data$actual
 
-  # NOTE: The mean isn't subtracted here, since they're supposed to be
+  # NOTE: The mean isn't subtracted here, since they're supposed to be the same.
   data.mat <- as.matrix(data)
   data.norm <- data.mat%*%diag(1/sqrt(colSums(data.mat^2)))
   expected.vs.actual <- (t(data.norm[,1])%*%data.norm[,2])^2
-  write(paste('  r-squared expected vs actual:',format(expected.vs.actual)),file=standard_out)
+  write(paste('  r-squared expected vs. actual:',format(expected.vs.actual)),file=standard_out)
 
   actual.vs.error <- cor(data$actual,data$error)^2
-  write(paste('  r-squared actual vs. error:',format(actual.vs.error)),file=standard_out)
+  write(paste('  r-squared actual vs. error:   ',format(actual.vs.error)),file=standard_out)
+
+  mean.diff <- mean(data$error)
+  write(paste('  mean expected vs. actual:     ',format(mean.diff)),file=standard_out)
 
   png(paste('timer-data-plot',log.min.sleep,'.png',sep=''),width=800,height=800)
   lim <- max(quantile(data$expected,0.99),quantile(data$actual,0.99))
-  plot(data[c(1,2)],pch='.',xlim=c(0,lim),ylim=c(0,lim),asp=1)
+  plot(data[c(1,2)],pch='.',cex=3,xlim=c(0,lim),ylim=c(0,lim),asp=1,col=rgb(0,0,0,0.05))
   lines(c(0,1),c(0,1),col='red',lwd=2)
   dev.off()
 
