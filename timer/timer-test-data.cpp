@@ -57,12 +57,12 @@ private:
 } //namespace
 
 int main(int argc, char *argv[]) {
-  if (argc != 3) {
-    fprintf(stderr, "%s [lambda] [count]\n", argv[0]);
+  if (argc != 3 && argc != 4) {
+    fprintf(stderr, "%s [lambda] [count] (min sleep size)\n", argv[0]);
     return 1;
   }
 
-  double lambda = 1.0;
+  double lambda = 1.0, min_sleep_size = 0.001;
   int    count = 0;
   char   error = 0;
 
@@ -76,8 +76,13 @@ int main(int argc, char *argv[]) {
     return 1;
   }
 
+  if (argc > 3 && sscanf(argv[3], "%lf%c", &min_sleep_size, &error) != 1) {
+    fprintf(stderr, "%s: Failed to parse \"%s\".\n", argv[0], argv[3]);
+    return 1;
+  }
+
   action_timer <int> actions;
-  actions.set_timer_factory([] { return new precise_timer(0.01, 0.002); });
+  actions.set_timer_factory([min_sleep_size] { return new precise_timer(0.01, min_sleep_size); });
   actions.set_category(0, lambda);
   time_printer printer(count, [&actions] { actions.async_stop(); });
   std::unique_ptr <abstract_action> action(new direct_action([&printer] { printer.action(); }));

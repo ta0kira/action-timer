@@ -31,10 +31,10 @@ public:
   // timer! Sleeps will be divided into intervals, with the last being truncated
   // as appropriate, e.g., 0.025 becomes 0.01, 0.01, 0.005, making adjustments
   // for processing latency.
-  // For time remainders below max_precision, a spinlock will be used instead of
-  // a sleep, to avoid excessive latency.
+  // For time remainders below min_sleep_size, a spinlock will be used instead
+  // of a sleep, to avoid excessive latency.
   explicit precise_timer(double cancel_granularity = 0.01,
-                         double max_precision = 0.0);
+                         double min_sleep_size = 0.0);
 
   void mark();
   void sleep_for(double time, std::function <bool()> cancel = nullptr) override;

@@ -1,9 +1,9 @@
 #include "action-timer.hpp"
 
 precise_timer::precise_timer(double cancel_granularity,
-                             double max_precision) :
+                             double min_sleep_size) :
   sleep_granularity(std::chrono::duration <double> (cancel_granularity)),
-  spinlock_limit(std::chrono::duration <double> (max_precision)), base_time() {
+  spinlock_limit(std::chrono::duration <double> (min_sleep_size)), base_time() {
   this->mark();
 }
 
@@ -27,7 +27,7 @@ void precise_timer::sleep_for(double time, std::function <bool()> cancel) {
       this->spinlock_finish();
       break;
     } else if (base_time - current_time < sleep_granularity) {
-      std::this_thread::sleep_for((base_time - current_time) - spinlock_limit);
+      std::this_thread::sleep_for(base_time - current_time - spinlock_limit);
     } else {
       std::this_thread::sleep_for(sleep_granularity - spinlock_limit);
     }
