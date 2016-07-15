@@ -62,7 +62,7 @@ int main(int argc, char *argv[]) {
     return 1;
   }
 
-  double lambda = 1.0, min_sleep_size = 0.001;
+  double lambda = 1.0, min_sleep_size = 0.0001;
   int    count = 0;
   char   error = 0;
 

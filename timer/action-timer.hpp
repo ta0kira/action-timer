@@ -33,7 +33,9 @@ public:
   // an actual sleep call. Below that limit, a spinlock will be used. Set this
   // value to something other than zero if you need precise timing for sleeps
   // that are shorter than your kernel's latency. (This is mostly a matter of
-  // experimentation.)
+  // experimentation.) Higher values will cause the timer to consume more CPU;
+  // therefore, set min_sleep_size to the lowest value possible. 0.0001 is a
+  // good place to start.
   explicit precise_timer(double cancel_granularity = 0.01,
                          double min_sleep_size = 0.0);
 
@@ -89,6 +91,8 @@ private:
 // Thread-safe.
 class direct_action : public abstract_action {
 public:
+  // NOTE: new_action must be thread-safe if this is used with an action_timer
+  // that has more than one thread!
   explicit direct_action(std::function <void()> new_action = nullptr) :
   action(new_action) {}
 
@@ -117,6 +121,7 @@ public:
   explicit action_timer(unsigned int threads = 1, int seed = time(nullptr)) :
   thread_count(threads), stop_called(true), stopped(true), generator(seed) {}
 
+  // NOTE: It's an error to call this when threads are running.
   void set_timer_factory(std::function <sleep_timer*()> factory);
 
   void set_category(const Type &category, double lambda);
@@ -138,12 +143,13 @@ public:
   // All threads are stopped.
   bool is_stopped() const;
   // Block until is_stopped is true. This is equivalent to join, except
-  // afterward the timer can be started again with start.
+  // afterward the timer can be started again with start, and this function can
+  // safely be called multiple times.
   void wait_stopped();
 
   // Stop all threads, but don't wait. Use this if you want to stop the threads
-  // from a direct_action that's owned by this timer. Note that the threads
-  // aren't actually cleaned up until stop is called.
+  // from a direct_action that's owned by this timer.
+  // NOTE: The threads aren't actually cleaned up until stop is called.
   void async_stop();
   // Threads should be stopping, but might not all be stopped.
   bool is_stopping() const;
@@ -166,11 +172,10 @@ private:
   typedef std::unordered_map <Type, generic_action> action_map;
   typedef lc::locking_container <action_map, lc::rw_lock> locked_action_map;
 
-  // NOTE: All members besides threads need to be thread-safe!
+  // NOTE: All members besides threads and timer_factory need to be thread-safe!
 
   const unsigned int thread_count;
   std::list <std::unique_ptr <std::thread>> threads;
-
   std::function <sleep_timer*()> timer_factory;
 
   std::mutex              state_lock;
@@ -188,6 +193,7 @@ private:
 
 template <class Type>
 void action_timer <Type> ::set_timer_factory(std::function <sleep_timer*()> factory) {
+  assert(this->is_stopped());
   timer_factory = factory;
 }
 
