@@ -36,6 +36,9 @@ public:
   // experimentation.) Higher values will cause the timer to consume more CPU;
   // therefore, set min_sleep_size to the lowest value possible. 0.0001 is a
   // good place to start.
+  // min_sleep_size should be much smaller than cancel_granularity. If it isn't,
+  // however, sleeps will occur in chunks of cancel_granularity size until the
+  // remainder is smaller than the smaller of the two.
   explicit precise_timer(double cancel_granularity = 0.01,
                          double min_sleep_size = 0.0);
 

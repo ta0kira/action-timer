@@ -18,18 +18,19 @@ void precise_timer::sleep_for(double time, std::function <bool()> cancel) {
   bool canceled = false;
 
   for (; !canceled; canceled = cancel && cancel()) {
-    const auto current_time = std::chrono::duration_cast <std::chrono::duration <double>> (
-      std::chrono::high_resolution_clock::now().time_since_epoch());
-    if (current_time >= base_time) {
+    const auto sleep_time = base_time -
+      std::chrono::duration_cast <std::chrono::duration <double>> (
+        std::chrono::high_resolution_clock::now().time_since_epoch());
+    if (sleep_time < std::chrono::duration <double> (0.0)) {
       break;
     }
-    if (base_time - current_time < spinlock_limit) {
+    if (sleep_time < spinlock_limit) {
       this->spinlock_finish();
       break;
-    } else if (base_time - current_time < sleep_granularity) {
-      std::this_thread::sleep_for(base_time - current_time - spinlock_limit);
+    } else if (sleep_time < sleep_granularity) {
+      std::this_thread::sleep_for(sleep_time - spinlock_limit);
     } else {
-      std::this_thread::sleep_for(sleep_granularity - spinlock_limit);
+      std::this_thread::sleep_for(sleep_granularity);
     }
   }
 

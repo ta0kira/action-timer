@@ -6,7 +6,7 @@ sink(stderr())
 l     <- 10000
 count <- 100000
 
-for (log.min.sleep in 3:6) {
+for (log.min.sleep in 2:6) {
   # NOTE: Calling format with all three at once will turn l and count into
   # floating-points.
   args <- sapply(c(l,count,0.1^log.min.sleep),function(x) format(x,scientific=FALSE))
@@ -22,13 +22,14 @@ for (log.min.sleep in 3:6) {
   data.mat <- as.matrix(data)
   data.norm <- data.mat%*%diag(1/sqrt(colSums(data.mat^2)))
   expected.vs.actual <- (t(data.norm[,1])%*%data.norm[,2])^2
-  write(paste('r-squared expected vs actual:',format(expected.vs.actual)),file=standard_out)
+  write(paste('  r-squared expected vs actual:',format(expected.vs.actual)),file=standard_out)
 
   actual.vs.error <- cor(data$actual,data$error)^2
-  write(paste('r-squared actual vs. error:',format(actual.vs.error)),file=standard_out)
+  write(paste('  r-squared actual vs. error:',format(actual.vs.error)),file=standard_out)
 
   png(paste('timer-data-plot',log.min.sleep,'.png',sep=''),width=800,height=800)
-  plot(data[c(1,2)],pch='.',xlim=c(0,quantile(data$expected,0.99)),ylim=c(0,quantile(data$actual,0.99)),asp=1)
+  lim <- max(quantile(data$expected,0.99),quantile(data$actual,0.99))
+  plot(data[c(1,2)],pch='.',xlim=c(0,lim),ylim=c(0,lim),asp=1)
   lines(c(0,1),c(0,1),col='red',lwd=2)
   dev.off()
 
