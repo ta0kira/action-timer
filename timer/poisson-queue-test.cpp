@@ -48,7 +48,7 @@ int main(int argc, char *argv[]) {
   queue.start();
 
   // NOTE: Needs to be async_action to avoid a deadlock!
-  action_timer <std::string> ::generic_action zombie_action(new async_action([&] {
+  action_timer <std::string> ::generic_action zombie_action(new async_action([&queue] {
     queue.zombie_cleanup();
     return true;
   }));
@@ -75,7 +75,7 @@ int main(int argc, char *argv[]) {
     } else {
       queue.set_processor(category,
         [category,lambda](stored_type value) {
-          if (!((*value + 1) % 1021)) {
+          if (!((*value + 1) % 13)) {
             // This isn't necessary; it just tests failure.
             std::cerr << category << ": FAILURE" << std::endl;
             return false;

@@ -34,8 +34,8 @@ either expressed or implied, of the FreeBSD Project.
 
 #include <atomic>
 #include <functional>
+#include <list>
 #include <memory>
-#include <queue>
 #include <thread>
 #include <utility>
 
@@ -43,7 +43,7 @@ either expressed or implied, of the FreeBSD Project.
 template <class Type>
 class blocking_strict_queue {
 public:
-  using queue_type = std::queue <Type>;
+  using queue_type = std::list <Type>;
 
   blocking_strict_queue(unsigned int new_capacity) :
   terminated(false), capacity(new_capacity) {}
@@ -54,6 +54,7 @@ public:
   bool transfer_next_item(queue_type &from);
   bool empty();
   bool dequeue(Type &removed);
+  void recover_lost_items(queue_type &to_queue);
 
   ~blocking_strict_queue();
 
@@ -80,6 +81,7 @@ public:
   bool is_terminated() const;
 
   bool transfer_next_item(locked_queue &from_queue);
+  void recover_lost_items(queue_type &to_queue);
 
   // TODO: Somehow pass the remaining data in the queue back to the caller?
   ~queue_processor();
@@ -113,8 +115,8 @@ bool blocking_strict_queue <Type> ::transfer_next_item(queue_type &from) {
   if (terminated || queue.size() >= capacity || from.empty()) {
     return false;
   } else {
-    queue.push(std::move(from.front()));
-    from.pop();
+    queue.push_back(std::move(from.front()));
+    from.pop_front();
     empty_wait.notify_all();
     return true;
   }
@@ -135,11 +137,20 @@ bool blocking_strict_queue <Type> ::dequeue(Type &removed) {
       continue;
     } else {
       removed = std::move(queue.front());
-      queue.pop();
+      queue.pop_front();
       return true;
     }
   }
   return false;
+}
+
+template <class Type>
+void blocking_strict_queue <Type> ::recover_lost_items(queue_type &to_queue) {
+  assert(this->is_terminated());
+  while (!queue.empty()) {
+    to_queue.push_back(std::move(queue.front()));
+    queue.pop_front();
+  }
 }
 
 template <class Type>
@@ -176,6 +187,12 @@ bool queue_processor <Type> ::transfer_next_item(locked_queue &from_queue) {
   // Should only block if processor_thread is in the process of removing an
   // item, but hasn't called action yet.
   return queue.transfer_next_item(*write_queue);
+}
+
+template <class Type>
+void queue_processor <Type> ::recover_lost_items(queue_type &to_queue) {
+  assert(this->is_terminated());
+  queue.recover_lost_items(to_queue);
 }
 
 template <class Type>
