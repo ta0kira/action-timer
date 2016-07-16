@@ -21,3 +21,9 @@ add_executable(
   timer-test-data.cpp
   action-timer.cpp)
 target_link_libraries(timer-test-data pthread)
+
+add_executable(
+  poisson-queue
+  poisson-queue.cpp
+  action-timer.cpp)
+target_link_libraries(poisson-queue pthread)
