@@ -56,7 +56,7 @@ private:
 class abstract_action {
 public:
   virtual void start() = 0;
-  virtual void trigger_action() = 0;
+  virtual bool trigger_action() = 0;
   virtual ~abstract_action() = default;
 };
 
@@ -66,12 +66,12 @@ public:
   // NOTE: A callback is used rather than a virtual function to avoid a race
   // condition when destructing while trying to execute the action.
 
-  explicit async_action(std::function <void()> new_action = nullptr) :
+  explicit async_action(std::function <bool()> new_action = nullptr) :
   destructor_called(false), action_waiting(), action(new_action) {}
 
-  void set_action(std::function <void()> new_action);
+  void set_action(std::function <bool()> new_action);
   void start() override;
-  void trigger_action() override;
+  bool trigger_action() override;
 
   // NOTE: This waits for the thread to reach an exit point, which could result
   // in waiting for the current action to finish executing. The consequences
@@ -86,7 +86,7 @@ private:
   std::unique_ptr <std::thread> thread;
 
   bool action_waiting;
-  std::function <void()> action;
+  std::function <bool()> action;
 
   std::mutex               action_lock;
   std::condition_variable  action_wait;
@@ -97,18 +97,18 @@ class sync_action : public abstract_action {
 public:
   // NOTE: new_action must be thread-safe if this is used with an action_timer
   // that has more than one thread!
-  explicit sync_action(std::function <void()> new_action = nullptr) :
+  explicit sync_action(std::function <bool()> new_action = nullptr) :
   action(new_action) {}
 
-  void set_action(std::function <void()> new_action);
+  void set_action(std::function <bool()> new_action);
   void start() override {}
-  void trigger_action() override;
+  bool trigger_action() override;
 
   // NOTE: This waits for an ongoing action to complete.
   ~sync_action() override;
 
 private:
-  typedef lc::locking_container <std::function <void()>, lc::rw_lock> locked_action;
+  typedef lc::locking_container <std::function <bool()>, lc::rw_lock> locked_action;
 
   locked_action action;
 };
@@ -352,8 +352,15 @@ void action_timer <Type> ::thread_loop(unsigned int thread_number) {
     auto action_read = locked_actions.get_read_auth(auth);
     assert(action_read);
     auto existing = action_read->find(category);
+    bool remove = false;
     if (existing != action_read->end() && existing->second) {
-      existing->second->trigger_action();
+      remove = !existing->second->trigger_action();
+    }
+    if (remove) {
+      action_read.clear();
+      assert(!action_read);
+      this->set_category(category, 0.0);
+      this->set_action(category, nullptr);
     }
   }
 }

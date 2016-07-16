@@ -1,16 +1,13 @@
-#include <atomic>
-#include <functional>
 #include <iostream>
 #include <memory>
-#include <queue>
 #include <string>
-#include <thread>
 #include <unordered_map>
 #include <utility>
 
 #include <string.h>
 
 #include "action-timer.hpp"
+#include "queue-processor.hpp"
 #include "locking-container.hpp"
 
 // For linking of non-template locking-container symbols.
@@ -18,120 +15,24 @@
 
 namespace {
 
-template <class Type>
-class blocking_strict_queue {
-public:
-  using queue_type = std::queue <Type>;
+using locked_processors =
+  lc::locking_container <std::unordered_map <std::string, std::unique_ptr<queue_processor <int>>>, lc::dumb_lock>;
 
-  blocking_strict_queue(unsigned int new_capacity) : terminated(false), capacity(new_capacity) {}
-
-  void terminate() {
-    std::unique_lock <std::mutex> local_lock(empty_lock);
-    terminated = true;
-    empty_wait.notify_all();
-  }
-
-  bool transfer_next_item(queue_type &from) {
-    std::unique_lock <std::mutex> local_lock(empty_lock);
-    if (terminated || queue.size() >= capacity || from.empty()) {
-      return false;
+void zombie_cleanup(locked_processors &processors) {
+  auto write_processors = processors.get_write();
+  assert(write_processors);
+  for (auto current = write_processors->begin(); current != write_processors->end();) {
+    if (!current->second || current->second->is_terminated()) {
+      auto removed = current++;
+      std::cerr << "Cleaning up " << removed->first << "." << std::endl;
+      // TODO: Is there a race condition between this and action_timer's
+      // execution of the action when action_timer has multiple threads?
+      write_processors->erase(removed);
     } else {
-      queue.push(std::move(from.front()));
-      from.pop();
-      empty_wait.notify_all();
-      return true;
+      ++current;
     }
   }
-
-  bool empty() {
-    std::unique_lock <std::mutex> local_lock(empty_lock);
-    return queue.empty();
-  }
-
-  bool dequeue(Type &removed) {
-    while (!terminated) {
-      std::unique_lock <std::mutex> local_lock(empty_lock);
-      if (queue.empty()) {
-        empty_wait.wait(local_lock);
-        continue;
-      } else {
-        removed = std::move(queue.front());
-        queue.pop();
-        return true;
-      }
-    }
-    return false;
-  }
-
-  ~blocking_strict_queue() {
-    this->terminate();
-  }
-
-private:
-  std::atomic <bool>       terminated;
-  std::mutex               empty_lock;
-  std::condition_variable  empty_wait;
-
-  const unsigned int capacity;
-  queue_type         queue;
-};
-
-template <class Type>
-class queue_processor {
-public:
-  using queue_type = typename blocking_strict_queue <Type> ::queue_type;
-  using locked_queue = lc::locking_container_base <queue_type>;
-
-  queue_processor(std::function <bool(Type)> new_action, unsigned int new_capacity = 1) :
-  destructor_called(false), action(new_action), queue(new_capacity) {}
-
-  void start() {
-    assert(!thread && !destructor_called);
-    thread.reset(new std::thread([this] { this->processor_thread(); }));
-  }
-
-  bool transfer_next_item(locked_queue &from_queue) {
-    auto write_queue = from_queue.get_write();
-    assert(write_queue);
-    // Should only block if processor_thread is in the process of removing an
-    // item, but hasn't called action yet.
-    return queue.transfer_next_item(*write_queue);
-  }
-
-  // TODO: Somehow pass the remaining data in the queue back to the caller?
-  ~queue_processor() {
-    destructor_called = true;
-    queue.terminate();
-    if (thread) {
-      thread->join();
-    }
-  }
-
-private:
-  void processor_thread() {
-    assert(action);
-    while (!destructor_called) {
-      Type removed;
-      if (!queue.dequeue(removed)) {
-        break;
-      } else {
-        if (!action(std::move(removed))) {
-          break;
-        }
-      }
-    }
-    // Don't accept anything new. This is necessary if action returns false and
-    // turns this processor into a zombie.
-    // TODO: Should zombies actually be handled, or just left there as clutter?
-    queue.terminate();
-  }
-
-  std::atomic <bool> destructor_called;
-  std::unique_ptr <std::thread> thread;
-
-  std::function <bool(Type)>   action;
-  blocking_strict_queue <Type> queue;
-};
+}
 
 } //namespace
 
@@ -140,11 +41,17 @@ int main(int argc, char *argv[]) {
   lc::locking_container <queue_processor <int> ::queue_type, lc::dumb_lock> queue;
 
   // NOTE: Must come before actions!
-  std::unordered_map <std::string, std::unique_ptr<queue_processor <int>>> processors;
+  locked_processors processors;
 
   action_timer <std::string> actions;
-  actions.set_category("check_for_updates", 10.0);
   actions.start();
+
+  actions.set_category("zombie_cleanup", 1.0);
+  action_timer <std::string> ::generic_action zombie_action(new sync_action([&processors] {
+    zombie_cleanup(processors);
+    return true;
+  }));
+  actions.set_action("zombie_cleanup", std::move(zombie_action));
 
   {
     auto write_queue = queue.get_write();
@@ -165,6 +72,9 @@ int main(int argc, char *argv[]) {
     }
     const std::string category(buffer);
 
+    auto write_processors = processors.get_write();
+    assert(write_processors);
+
     if (lambda <= 0.0) {
       // NOTE: Removing a processor will result in the queued data being lost!
       // 1. Remove the category from consideration.
@@ -172,9 +82,11 @@ int main(int argc, char *argv[]) {
       // 2. Remove the category's action.
       actions.set_action(category, nullptr);
       // 3. Remove the catgory's processor.
-      processors.erase(category);
+      write_processors->erase(category);
     } else {
       // 1. Create and start a new processor.
+      // NOTE: Lambda is used as the capacity based on the probability of an
+      // overflow in a fixed time interval.
       const unsigned int capacity = std::max(1, (int) lambda);
       std::unique_ptr<queue_processor <int>> processor(
         new queue_processor <int> ([category,lambda](int value) {
@@ -185,18 +97,23 @@ int main(int argc, char *argv[]) {
                                    }, capacity));
       processor->start();
       auto *const processor_ptr = processor.get();
-      action_timer <std::string> ::generic_action action(new sync_action([processor_ptr,category,&queue] {
-                                                           if (!processor_ptr->transfer_next_item(queue)) {
-                                                             std::cerr << category << ": FULL" << std::endl;
-                                                           }
-                                                         }));
+      action_timer <std::string> ::generic_action action(
+        new sync_action([processor_ptr,category,&queue] {
+                          if (!processor_ptr->transfer_next_item(queue)) {
+                            // This isn't necessary; it just tests failure.
+                            std::cerr << category << ": FULL" << std::endl;
+                            processor_ptr->terminate();
+                            return false;
+                          }
+                          return true;
+                        }));
       // 2. Replace (or add) the action.
       actions.set_action(category, std::move(action));
       // 3. Replace (or add) the processor.
       // NOTE: This must come after set_action so that the old action is removed
       // before its processor is destructed!
       // TODO: Figure out why std::move + emplace causes a deadlock.
-      processors[category].swap(processor);
+      (*write_processors)[category].swap(processor);
       // 4. Update (or add) the category for consideration.
       // TODO: Maybe this should be the only action if the processor already
       // exists? Might not work, since the processor's queue is based on lambda.

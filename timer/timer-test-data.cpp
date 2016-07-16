@@ -129,6 +129,7 @@ int main(int argc, char *argv[]) {
 
   std::unique_ptr <abstract_action> action(new sync_action([&printer] {
                                              printer.action();
+                                             return true;
                                            }));
   actions.set_action(0, std::move(action));
 
