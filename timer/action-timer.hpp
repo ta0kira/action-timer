@@ -18,6 +18,7 @@
 
 
 struct sleep_timer {
+  virtual void mark() = 0;
   virtual void sleep_for(double time, std::function <bool()> cancel = nullptr) = 0;
   virtual ~sleep_timer() = default;
 };
@@ -42,7 +43,7 @@ public:
   explicit precise_timer(double cancel_granularity = 0.01,
                          double min_sleep_size = 0.0);
 
-  void mark();
+  void mark() override;
   void sleep_for(double time, std::function <bool()> cancel = nullptr) override;
 
 private:
@@ -332,6 +333,8 @@ void action_timer <Type> ::thread_loop(unsigned int thread_number) {
         break;
       }
       state_wait.wait(local_lock);
+      // Reset the timer so that the timer doesn't correct for the waiting time.
+      timer->mark();
       continue;
     }
 

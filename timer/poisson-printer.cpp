@@ -41,7 +41,7 @@ bool expand_escapes(std::string &escaped) {
       }
 
 #define SINGLE_CHAR_CASE(s, v) \
-  case s: unescaped.push_back(v); ++i; break;
+  case s: unescaped.push_back(v); break;
 
       switch (escaped[++i]) {
         SINGLE_CHAR_CASE('\\', '\\')
