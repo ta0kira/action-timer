@@ -49,23 +49,23 @@ void precise_timer::spinlock_finish() const {
   }
 }
 
-void thread_action::set_action(std::function <void()> new_action) {
+void async_action::set_action(std::function <void()> new_action) {
   action = new_action;
 }
 
-void thread_action::start() {
+void async_action::start() {
   if (!thread) {
     thread.reset(new std::thread([this] { this->thread_loop(); }));
   }
 }
 
-void thread_action::trigger_action() {
+void async_action::trigger_action() {
   std::unique_lock <std::mutex> local_lock(action_lock);
   action_waiting = true;
   action_wait.notify_all();
 }
 
-thread_action::~thread_action() {
+async_action::~async_action() {
   destructor_called = true;
   action_wait.notify_all();
   if (thread) {
@@ -73,7 +73,7 @@ thread_action::~thread_action() {
   }
 }
 
-void thread_action::thread_loop() {
+void async_action::thread_loop() {
   while (!destructor_called) {
     {
       std::unique_lock <std::mutex> local_lock(action_lock);
@@ -89,13 +89,13 @@ void thread_action::thread_loop() {
   }
 }
 
-void direct_action::set_action(std::function <void()> new_action) {
+void sync_action::set_action(std::function <void()> new_action) {
   auto write_action = action.get_write();
   assert(write_action);
   write_action->swap(new_action);
 }
 
-void direct_action::trigger_action() {
+void sync_action::trigger_action() {
   auto read_action = action.get_write();
   assert(read_action);
   if (*read_action) {
@@ -104,6 +104,6 @@ void direct_action::trigger_action() {
 }
 
 // NOTE: This waits for an ongoing action to complete.
-direct_action::~direct_action() {
+sync_action::~sync_action() {
   auto write_action = action.get_write();
 }

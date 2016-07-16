@@ -61,12 +61,12 @@ public:
 };
 
 // Thread-safe, except for start.
-class thread_action : public abstract_action {
+class async_action : public abstract_action {
 public:
   // NOTE: A callback is used rather than a virtual function to avoid a race
   // condition when destructing while trying to execute the action.
 
-  explicit thread_action(std::function <void()> new_action = nullptr) :
+  explicit async_action(std::function <void()> new_action = nullptr) :
   destructor_called(false), action_waiting(), action(new_action) {}
 
   void set_action(std::function <void()> new_action);
@@ -77,7 +77,7 @@ public:
   // in waiting for the current action to finish executing. The consequences
   // should be no worse than the action being executed. For this reason, the
   // action shouldn't block forever for an reason.
-  ~thread_action() override;
+  ~async_action() override;
 
 private:
   void thread_loop();
@@ -93,11 +93,11 @@ private:
 };
 
 // Thread-safe.
-class direct_action : public abstract_action {
+class sync_action : public abstract_action {
 public:
   // NOTE: new_action must be thread-safe if this is used with an action_timer
   // that has more than one thread!
-  explicit direct_action(std::function <void()> new_action = nullptr) :
+  explicit sync_action(std::function <void()> new_action = nullptr) :
   action(new_action) {}
 
   void set_action(std::function <void()> new_action);
@@ -105,7 +105,7 @@ public:
   void trigger_action() override;
 
   // NOTE: This waits for an ongoing action to complete.
-  ~direct_action() override;
+  ~sync_action() override;
 
 private:
   typedef lc::locking_container <std::function <void()>, lc::rw_lock> locked_action;
@@ -130,7 +130,7 @@ public:
 
   void set_category(const Type &category, double lambda);
 
-  // Ideally, thread_action (or similar) should be used so that the amount of
+  // Ideally, async_action (or similar) should be used so that the amount of
   // time spent on the action by the timer thread is extremely small, with the
   // actual execution of the action happening in a dedicated thread.
   void set_action(const Type &category, generic_action action);
@@ -141,7 +141,7 @@ public:
 
   // Stop all threads, and wait for them to all exit.
   // NOTE: It's an error to call this from a thread that's owned by this timer,
-  // e.g., calling this from direct_action will cause a crash; use async_stop
+  // e.g., calling this from sync_action will cause a crash; use async_stop
   // instead.
   void stop();
   // All threads are stopped.
@@ -152,7 +152,7 @@ public:
   void wait_stopped();
 
   // Stop all threads, but don't wait. Use this if you want to stop the threads
-  // from a direct_action that's owned by this timer.
+  // from a sync_action that's owned by this timer.
   // NOTE: The threads aren't actually cleaned up until stop is called.
   void async_stop();
   // Threads should be stopping, but might not all be stopped.

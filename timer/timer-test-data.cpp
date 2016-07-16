@@ -127,7 +127,7 @@ int main(int argc, char *argv[]) {
   });
   actions.set_category(0, lambda);
 
-  std::unique_ptr <abstract_action> action(new direct_action([&printer] {
+  std::unique_ptr <abstract_action> action(new sync_action([&printer] {
                                              printer.action();
                                            }));
   actions.set_action(0, std::move(action));
