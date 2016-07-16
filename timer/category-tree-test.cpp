@@ -126,9 +126,34 @@ TEST(category_node_test, test_insert_no_rebalance) {
   string_node_type::update_category(node, "A", 2);
   string_node_type::update_category(node, "C", 3);
   EXPECT_NE(nullptr, node);
+  node_printer::print_node(*node);
   EXPECT_TRUE(node->validate_balanced());
   EXPECT_TRUE(node->validate_sorted());
   EXPECT_TRUE(node->validate_sized());
+}
+
+TEST(category_node_test, test_update_category_size) {
+  std::unique_ptr <string_node_type> node;
+  string_node_type::update_category(node, "B", 1);
+  string_node_type::update_category(node, "A", 2);
+  string_node_type::update_category(node, "C", 3);
+  EXPECT_NE(nullptr, node);
+  string_node_type::update_category(node, "C", 1);
+  node_printer::print_node(*node);
+  EXPECT_TRUE(node->validate_sized());
+  EXPECT_EQ(1, node->high_child->size);
+}
+
+TEST(category_node_test, test_update_category_size_with_function) {
+  std::unique_ptr <string_node_type> node;
+  string_node_type::update_category(node, "B", 1);
+  string_node_type::update_category(node, "A", 2);
+  string_node_type::update_category(node, "C", 3);
+  EXPECT_NE(nullptr, node);
+  string_node_type::update_category(node, "C", [](int x) { return x/3; });
+  node_printer::print_node(*node);
+  EXPECT_TRUE(node->validate_sized());
+  EXPECT_EQ(1, node->high_child->size);
 }
 
 TEST(category_node_test, test_insert_rebalance_ordered) {

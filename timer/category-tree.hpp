@@ -3,6 +3,7 @@
 
 #include <cassert>
 #include <cmath>
+#include <functional>
 #include <memory>
 #include <stack>
 
@@ -29,6 +30,10 @@ public:
 
   void update_category(const Type &category, Size new_size) {
     node_type::update_category(root, category, new_size);
+  }
+
+  void update_category(const Type &category, const std::function <Size(Size)> &update) {
+    node_type::update_category(root, category, update);
   }
 
   void erase_category(const Type &category) {
@@ -100,7 +105,8 @@ public:
     return high_child->locate(check_size);
   }
 
-  static void update_category(optional_node &current, const Type &new_category, Size new_size) {
+  static void update_category(optional_node &current, const Type &new_category,
+                              Size new_size) {
     if (!current) {
       current.reset(new category_node(new_category, new_size));
     } else if (current->category == new_category) {
@@ -109,6 +115,21 @@ public:
       update_category(current->low_child, new_category, new_size);
     } else {
       update_category(current->high_child, new_category, new_size);
+    }
+    update_and_rebalance(current);
+  }
+
+  static void update_category(optional_node &current, const Type &new_category,
+                              const std::function <Size(Size)> &update) {
+    assert(update);
+    if (!current) {
+      current.reset(new category_node(new_category, update(Size())));
+    } else if (current->category == new_category) {
+      current->size = update(current->size);
+    } else if (new_category < current->category) {
+      update_category(current->low_child, new_category, update);
+    } else {
+      update_category(current->high_child, new_category, update);
     }
     update_and_rebalance(current);
   }
@@ -280,6 +301,8 @@ private:
   FRIEND_TEST(category_node_test, test_exists_child);
   FRIEND_TEST(category_node_test, test_update_size);
   FRIEND_TEST(category_node_test, test_insert_no_rebalance);
+  FRIEND_TEST(category_node_test, test_update_category_size);
+  FRIEND_TEST(category_node_test, test_update_category_size_with_function);
   FRIEND_TEST(category_node_test, test_insert_rebalance_ordered);
   FRIEND_TEST(category_node_test, test_insert_rebalance_unordered);
   FRIEND_TEST(category_node_test, erase_category_all_unordered);
