@@ -53,9 +53,6 @@ public:
       std::unique_lock <std::mutex> local_lock(empty_lock);
       if (queue.empty()) {
         empty_wait.wait(local_lock);
-        if (terminated) {
-          break;
-        }
         continue;
       } else {
         removed = std::move(queue.front());
@@ -118,9 +115,15 @@ private:
       if (!queue.dequeue(removed)) {
         break;
       } else {
-        action(std::move(removed));
+        if (!action(std::move(removed))) {
+          break;
+        }
       }
     }
+    // Don't accept anything new. This is necessary if action returns false and
+    // turns this processor into a zombie.
+    // TODO: Should zombies actually be handled, or just left there as clutter?
+    queue.terminate();
   }
 
   std::atomic <bool> destructor_called;
@@ -187,7 +190,7 @@ int main(int argc, char *argv[]) {
                                                              std::cerr << category << ": FULL" << std::endl;
                                                            }
                                                          }));
-      // 2. Replace (or add) the processor as the action.
+      // 2. Replace (or add) the action.
       actions.set_action(category, std::move(action));
       // 3. Replace (or add) the processor.
       // NOTE: This must come after set_action so that the old action is removed
@@ -195,6 +198,8 @@ int main(int argc, char *argv[]) {
       // TODO: Figure out why std::move + emplace causes a deadlock.
       processors[category].swap(processor);
       // 4. Update (or add) the category for consideration.
+      // TODO: Maybe this should be the only action if the processor already
+      // exists? Might not work, since the processor's queue is based on lambda.
       actions.set_category(category, lambda);
     }
   }
