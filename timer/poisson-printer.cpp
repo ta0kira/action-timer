@@ -89,8 +89,8 @@ bool expand_escapes(std::string &escaped) {
 } //namespace
 
 int main(int argc, char *argv[]) {
-  action_timer <std::string> actions(4);
-  actions.set_category("check_for_updates", 4.0);
+  action_timer <std::string> actions;
+  actions.set_category("check_for_updates", 1.0);
   actions.start();
 
   std::string input;
