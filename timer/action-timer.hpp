@@ -36,10 +36,10 @@ either expressed or implied, of the FreeBSD Project.
 #include <condition_variable>
 #include <list>
 #include <memory>
+#include <map>
 #include <mutex>
 #include <random>
 #include <thread>
-#include <unordered_map>
 
 #include <time.h>
 
@@ -204,7 +204,7 @@ private:
   typedef lc::locking_container <category_tree <Type, double>, lc::rw_lock>
     locked_category_tree;
 
-  typedef std::unordered_map <Type, generic_action> action_map;
+  typedef std::map <Type, generic_action> action_map;
   typedef lc::locking_container <action_map, lc::rw_lock> locked_action_map;
 
   // NOTE: All members besides threads and timer_factory need to be thread-safe!
