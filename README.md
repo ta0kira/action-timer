@@ -57,7 +57,7 @@ with size 1, **B** with size 5, and **C** with size 4:
 
 ```text
 0 1         6       10
-|-|---------|-------|
+|)|--------)|------)|
  A     B        C
 ```
 
@@ -69,7 +69,7 @@ number is 0.56, we can search for 5.6:
 ```text
          ~5.6
 0 1        |6       10
-|-|---------|-------|
+|)|--------)|------)|
  A     B        C
 ```
 
@@ -100,6 +100,7 @@ int main() {
   categories.update_category('B', 5.0);
   categories.update_category('C', 4.0);
 
+  // Note that the lookup value must be strictly less-than the total size!
   std::cout << "Choice for 0.56: "
             << categories.locate(0.56 * categories.get_total_size())
             << std::endl;

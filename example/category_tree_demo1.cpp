@@ -9,6 +9,7 @@ int main() {
   categories.update_category('B', 5.0);
   categories.update_category('C', 4.0);
 
+  // Note that the lookup value must be strictly less-than the total size!
   std::cout << "Choice for 0.56: "
             << categories.locate(0.56 * categories.get_total_size())
             << std::endl;
