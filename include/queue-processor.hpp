@@ -46,15 +46,18 @@ public:
   using queue_type = std::list <Type>;
 
   blocking_strict_queue(unsigned int new_capacity) :
-  terminated(false), capacity(new_capacity) {}
+  terminated(false), in_progress(0), capacity(new_capacity) {}
 
   void terminate();
   bool is_terminated() const;
 
-  bool requeue_item(Type item);
   bool transfer_next_item(queue_type &from);
   bool empty();
+
   bool dequeue(Type &removed);
+  bool requeue_item(Type item);
+  void done_with_item();
+
   void recover_lost_items(queue_type &to_queue);
 
   ~blocking_strict_queue();
@@ -64,6 +67,7 @@ private:
   std::mutex              empty_lock;
   std::condition_variable empty_wait;
 
+  unsigned int       in_progress;
   const unsigned int capacity;
   queue_type         queue;
 };
@@ -111,21 +115,9 @@ bool blocking_strict_queue <Type> ::is_terminated() const {
 }
 
 template <class Type>
-bool blocking_strict_queue <Type> ::requeue_item(Type item) {
-  std::unique_lock <std::mutex> local_lock(empty_lock);
-  if (terminated || queue.size() >= capacity) {
-    return false;
-  } else {
-    queue.push_front(std::move(item));
-    empty_wait.notify_all();
-    return true;
-  }
-}
-
-template <class Type>
 bool blocking_strict_queue <Type> ::transfer_next_item(queue_type &from) {
   std::unique_lock <std::mutex> local_lock(empty_lock);
-  if (terminated || queue.size() >= capacity || from.empty()) {
+  if (terminated || queue.size() + in_progress >= capacity || from.empty()) {
     return false;
   } else {
     queue.push_back(std::move(from.front()));
@@ -149,12 +141,33 @@ bool blocking_strict_queue <Type> ::dequeue(Type &removed) {
       empty_wait.wait(local_lock);
       continue;
     } else {
+      ++in_progress;
       removed = std::move(queue.front());
       queue.pop_front();
       return true;
     }
   }
   return false;
+}
+
+template <class Type>
+bool blocking_strict_queue <Type> ::requeue_item(Type item) {
+  std::unique_lock <std::mutex> local_lock(empty_lock);
+  assert(in_progress > 0);
+  if (terminated || queue.size() + --in_progress >= capacity) {
+    return false;
+  } else {
+    queue.push_front(std::move(item));
+    empty_wait.notify_all();
+    return true;
+  }
+}
+
+template <class Type>
+void blocking_strict_queue <Type> ::done_with_item() {
+  std::unique_lock <std::mutex> local_lock(empty_lock);
+  assert(in_progress > 0);
+  --in_progress;
 }
 
 template <class Type>
@@ -227,6 +240,8 @@ void queue_processor <Type> ::processor_thread() {
       if (!action(removed)) {
         queue.requeue_item(std::move(removed));
         break;
+      } else {
+        queue.done_with_item();
       }
     }
   }
