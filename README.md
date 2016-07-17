@@ -104,6 +104,11 @@ int main() {
   std::cout << "Choice for 0.56: "
             << categories.locate(0.56 * categories.get_total_size())
             << std::endl;
+
+  categories.update_category('C', [](int x) { return 3.0*x; });
+  std::cout << "Choice for 0.56: "
+            << categories.locate(0.56 * categories.get_total_size())
+            << std::endl;
 }
 ```
 
@@ -239,9 +244,9 @@ $ ./action_timer_demo1
 
 `poisson_queue` manages a queue of items and a dynamic set of processors that
 process these items. At the time each process is registered, the caller commits
-to a certain average level of traffic via a _&lambda;_ exponential parameter.
-The `poisson_queue` attempts to pass a new item to each processor according to
-the respective rate that has been committed to.
+to a certain average level of traffic via a _&lambda;_ Poisson parameter. The
+`poisson_queue` attempts to pass a new item to each processor according to the
+respective rate that has been committed to.
 
 **Why would you ever want this?**
 

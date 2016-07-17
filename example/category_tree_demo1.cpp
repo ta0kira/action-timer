@@ -13,4 +13,9 @@ int main() {
   std::cout << "Choice for 0.56: "
             << categories.locate(0.56 * categories.get_total_size())
             << std::endl;
+
+  categories.update_category('C', [](int x) { return 3.0*x; });
+  std::cout << "Choice for 0.56: "
+            << categories.locate(0.56 * categories.get_total_size())
+            << std::endl;
 }
