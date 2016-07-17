@@ -77,6 +77,9 @@ public:
 private:
   void recover_lost_items(queue_processor <Type> &processor);
 
+  // NOTE: Category is already required to be sortable by action_timer. Since
+  // the log(n) price is already being paid, this is a map so that we don't have
+  // to also impose hashability on Category.
   using locked_processors =
     lc::locking_container <std::map <Category, std::unique_ptr<queue_processor <Type>>>, lc::dumb_lock>;
 

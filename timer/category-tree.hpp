@@ -38,36 +38,36 @@ either expressed or implied, of the FreeBSD Project.
 #include <memory>
 #include <stack>
 
-template <class Type, class Size>
+template <class Category, class Size>
 class category_node;
 
-template <class Type, class Size = double>
+template <class Category, class Size = double>
 class category_tree {
 public:
-  using node_type = category_node <Type, Size>;
+  using node_type = category_node <Category, Size>;
 
-  bool category_exists(const Type &category) const {
+  bool category_exists(const Category &category) const {
     return root && root->category_exists(category);
   }
 
-  Size category_size(const Type &category) const {
+  Size category_size(const Category &category) const {
     return root? root->category_size(category) : Size();
   }
 
-  const Type &locate(Size size) const {
+  const Category &locate(Size size) const {
     assert(root && size >= Size() && size < this->get_total_size());
     return root->locate(size);
   }
 
-  void update_category(const Type &category, Size new_size) {
+  void update_category(const Category &category, Size new_size) {
     node_type::update_category(root, category, new_size);
   }
 
-  void update_category(const Type &category, const std::function <Size(Size)> &update) {
+  void update_category(const Category &category, const std::function <Size(Size)> &update) {
     node_type::update_category(root, category, update);
   }
 
-  void erase_category(const Type &category) {
+  void erase_category(const Category &category) {
     node_type::erase_category(root, category);
   }
 
@@ -83,19 +83,19 @@ private:
 #endif
 };
 
-template <class Type, class Size>
+template <class Category, class Size>
 class category_node {
 public:
   using optional_node = std::unique_ptr <category_node>;
 
-  category_node(const Type &new_category, Size new_size) :
+  category_node(const Category &new_category, Size new_size) :
   category(new_category), size(new_size), height(1), total_size() {}
 
   Size get_total_size() const {
     return total_size;
   }
 
-  bool category_exists(const Type &check_category) const {
+  bool category_exists(const Category &check_category) const {
     if (check_category == category) return true;
     if (check_category < category) {
       return low_child?  low_child->category_exists(check_category)  : false;
@@ -105,7 +105,7 @@ public:
     return false;
   }
 
-  Size category_size(const Type &check_category) const {
+  Size category_size(const Category &check_category) const {
     if (check_category == category) return size;
     if (check_category < category) {
       return low_child?  low_child->category_size(check_category)  : Size();
@@ -119,7 +119,7 @@ public:
   // to potential precision problems when combining/splitting intervals. Note
   // that the upper end is open, which allows this to work as expected with
   // integer size types.
-  const Type &locate(Size check_size) const {
+  const Category &locate(Size check_size) const {
     // Interval is divided into three parts: low, self, high.
     if (low_child && check_size < low_child->total_size) {
       return low_child->locate(check_size);
@@ -136,7 +136,7 @@ public:
     return high_child->locate(check_size);
   }
 
-  static void update_category(optional_node &current, const Type &new_category,
+  static void update_category(optional_node &current, const Category &new_category,
                               Size new_size) {
     if (!current) {
       current.reset(new category_node(new_category, new_size));
@@ -150,7 +150,7 @@ public:
     update_and_rebalance(current);
   }
 
-  static void update_category(optional_node &current, const Type &new_category,
+  static void update_category(optional_node &current, const Category &new_category,
                               const std::function <Size(Size)> &update) {
     assert(update);
     if (!current) {
@@ -165,7 +165,7 @@ public:
     update_and_rebalance(current);
   }
 
-  static void erase_category(optional_node &current, const Type &new_category) {
+  static void erase_category(optional_node &current, const Category &new_category) {
     optional_node discard;
     if (!current) {
       return;
@@ -320,7 +320,7 @@ private:
     }
   }
 
-  const Type category;
+  const Category category;
   Size       size;
 
   int  height;

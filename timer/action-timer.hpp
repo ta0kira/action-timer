@@ -144,7 +144,7 @@ private:
   locked_action action;
 };
 
-template <class Type>
+template <class Category>
 class action_timer {
 public:
   typedef std::unique_ptr <abstract_action> generic_action;
@@ -163,12 +163,12 @@ public:
   // NOTE: It's an error to call this when threads are running.
   void set_timer_factory(std::function <sleep_timer*()> factory);
 
-  void set_category(const Type &category, double lambda);
+  void set_category(const Category &category, double lambda);
 
   // Ideally, async_action (or similar) should be used so that the amount of
   // time spent on the action by the timer thread is extremely small, with the
   // actual execution of the action happening in a dedicated thread.
-  void set_action(const Type &category, generic_action action);
+  void set_action(const Category &category, generic_action action);
 
   // Start the timer threads. It's an error to call this when the threads are
   // already running.
@@ -205,10 +205,13 @@ private:
 
   void thread_loop(unsigned int thread_number);
 
-  typedef lc::locking_container <category_tree <Type, double>, lc::rw_lock>
+  typedef lc::locking_container <category_tree <Category, double>, lc::rw_lock>
     locked_category_tree;
 
-  typedef std::map <Type, generic_action> action_map;
+  // NOTE: Category is already required to be sortable by category_tree. Since
+  // the log(n) price is already being paid, this is a map so that we don't have
+  // to also impose hashability on Category.
+  typedef std::map <Category, generic_action> action_map;
   typedef lc::locking_container <action_map, lc::rw_lock> locked_action_map;
 
   // NOTE: All members besides threads and timer_factory need to be thread-safe!
@@ -230,14 +233,14 @@ private:
 };
 
 
-template <class Type>
-void action_timer <Type> ::set_timer_factory(std::function <sleep_timer*()> factory) {
+template <class Category>
+void action_timer <Category> ::set_timer_factory(std::function <sleep_timer*()> factory) {
   assert(this->is_stopped());
   timer_factory = factory;
 }
 
-template <class Type>
-void action_timer <Type> ::set_category(const Type &category, double lambda) {
+template <class Category>
+void action_timer <Category> ::set_category(const Category &category, double lambda) {
   lc::lock_auth_base::auth_type auth(new lc::lock_auth <lc::w_lock>);
   auto category_write = locked_categories.get_write_auth(auth);
   assert(category_write);
@@ -254,8 +257,8 @@ void action_timer <Type> ::set_category(const Type &category, double lambda) {
   }
 }
 
-template <class Type>
-void action_timer <Type> ::set_action(const Type &category, generic_action action) {
+template <class Category>
+void action_timer <Category> ::set_action(const Category &category, generic_action action) {
   if (action) {
     action->start();
   }
@@ -270,8 +273,8 @@ void action_timer <Type> ::set_action(const Type &category, generic_action actio
   }
 }
 
-template <class Type>
-void action_timer <Type> ::start() {
+template <class Category>
+void action_timer <Category> ::start() {
   assert(this->is_stopped());
   stopped = stop_called = false;
   if (threads.empty()) {
@@ -281,27 +284,27 @@ void action_timer <Type> ::start() {
   }
 }
 
-template <class Type>
-void action_timer <Type> ::stop() {
+template <class Category>
+void action_timer <Category> ::stop() {
   this->async_stop();
   this->join();
 }
 
-template <class Type>
-bool action_timer <Type> ::is_stopped() const {
+template <class Category>
+bool action_timer <Category> ::is_stopped() const {
   return stopped;
 }
 
-template <class Type>
-void action_timer <Type> ::wait_stopped() {
+template <class Category>
+void action_timer <Category> ::wait_stopped() {
   while (!this->is_stopped()) {
     std::unique_lock <std::mutex> local_lock(state_lock);
     state_wait.wait(local_lock);
   }
 }
 
-template <class Type>
-void action_timer <Type> ::async_stop() {
+template <class Category>
+void action_timer <Category> ::async_stop() {
   {
     std::unique_lock <std::mutex> local_lock(state_lock);
     stop_called = true;
@@ -309,26 +312,26 @@ void action_timer <Type> ::async_stop() {
   }
 }
 
-template <class Type>
-bool action_timer <Type> ::is_stopping() const {
+template <class Category>
+bool action_timer <Category> ::is_stopping() const {
   return stop_called;
 }
 
-template <class Type>
-void action_timer <Type> ::wait_stopping() {
+template <class Category>
+void action_timer <Category> ::wait_stopping() {
   while (!this->is_stopping()) {
     std::unique_lock <std::mutex> local_lock(state_lock);
     state_wait.wait(local_lock);
   }
 }
 
-template <class Type>
-action_timer <Type> ::~action_timer() {
+template <class Category>
+action_timer <Category> ::~action_timer() {
   this->stop();
 }
 
-template <class Type>
-void action_timer <Type> ::join() {
+template <class Category>
+void action_timer <Category> ::join() {
   while (!threads.empty()) {
     assert(threads.front());
     assert(std::this_thread::get_id() != threads.front()->get_id());
@@ -338,8 +341,8 @@ void action_timer <Type> ::join() {
   stopped = true;
 }
 
-template <class Type>
-void action_timer <Type> ::thread_loop(unsigned int thread_number) {
+template <class Category>
+void action_timer <Category> ::thread_loop(unsigned int thread_number) {
   lc::lock_auth_base::auth_type auth(new lc::lock_auth <lc::rw_lock>);
   // NOTE: This *must* be unique to this thread!
   std::unique_ptr <sleep_timer> timer(timer_factory? timer_factory() : new precise_timer);
@@ -374,7 +377,7 @@ void action_timer <Type> ::thread_loop(unsigned int thread_number) {
     }
 
     // NOTE: Need to copy category to avoid a race condition!
-    const Type   category = category_read->locate(category_uniform * category_read->get_total_size());
+    const Category   category = category_read->locate(category_uniform * category_read->get_total_size());
     const double time     = time_exponential / category_read->get_total_size() * (double) thread_count;
     category_read.clear();
     assert(!category_read);

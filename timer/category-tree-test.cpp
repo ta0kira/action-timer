@@ -45,15 +45,15 @@ using num_node_type    = category_node <int, int>;
 
 class node_printer {
 public:
-  template <class Type, class Size>
-  static void print_node(const category_node <Type, Size> &node) {
+  template <class Category, class Size>
+  static void print_node(const category_node <Category, Size> &node) {
     print_category(node);
     print_node(node, "");
   }
 
 private:
-  template <class Type, class Size>
-  static void print_node(const category_node <Type, Size> &node,
+  template <class Category, class Size>
+  static void print_node(const category_node <Category, Size> &node,
                          const std::string &padding) {
     if (node.low_child) {
       std::cerr << padding << "|- ";
@@ -71,8 +71,8 @@ private:
     }
   }
 
-  template <class Type, class Size>
-  static void print_category(const category_node <Type, Size> &node) {
+  template <class Category, class Size>
+  static void print_category(const category_node <Category, Size> &node) {
     std::cerr << node.category << "  ["
               << node.size << "/"
               << node.total_size << "]";
