@@ -74,12 +74,8 @@ int main(int argc, char *argv[]) {
       queue.remove_action(category);
     } else {
       queue.set_processor(category,
-        [category,lambda](stored_type value) {
-          if (!((*value + 1) % 13)) {
-            // This isn't necessary; it just tests failure.
-            std::cerr << category << ": FAILURE" << std::endl;
-            return false;
-          }
+        [category,lambda](stored_type &value) {
+          // TODO: Add some sort of failure condition.
           std::cout << category << ": " << *value << std::endl;
           std::this_thread::sleep_for(
             std::chrono::duration <double> (1.0 / lambda));

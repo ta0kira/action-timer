@@ -64,7 +64,7 @@ public:
 
   // The action uses queue data.
   void set_processor(const Category &category,
-                     std::function <bool(Type)> process_function,
+                     std::function <bool(Type&)> process_function,
                      double lambda, unsigned int capacity);
 
   // Remove the action/processor associated with the category.
@@ -75,6 +75,8 @@ public:
   bool zombie_cleanup();
 
 private:
+  void recover_lost_items(queue_processor <Type> &processor);
+
   using locked_processors =
     lc::locking_container <std::map <Category, std::unique_ptr<queue_processor <Type>>>, lc::dumb_lock>;
 
@@ -111,7 +113,7 @@ void poisson_queue <Category, Type> ::set_action(const Category &category,
 
 template <class Category, class Type>
 void poisson_queue <Category, Type> ::set_processor(const Category &category,
-                                                    std::function <bool(Type)> process_function,
+                                                    std::function <bool(Type&)> process_function,
                                                     double lambda, unsigned int capacity) {
   // 1. Create and start a new processor.
   std::unique_ptr<queue_processor <Type>> processor(
@@ -133,8 +135,11 @@ void poisson_queue <Category, Type> ::set_processor(const Category &category,
   // TODO: Figure out why std::move + emplace causes a deadlock.
   auto write_processors = processors.get_write();
   assert(write_processors);
-  // TODO: Add item recovery here.
   (*write_processors)[category].swap(processor);
+  if (processor) {
+    processor->terminate();
+    this->recover_lost_items(*processor);
+  }
 
   // 4. Update (or add) the category for consideration.
   // TODO: Maybe this should be the only action if the processor already
@@ -154,8 +159,14 @@ void poisson_queue <Category, Type> ::remove_action(const Category &category) {
   // 3. Remove the catgory's processor.
   auto write_processors = processors.get_write();
   assert(write_processors);
-  // TODO: Add item recovery here.
-  write_processors->erase(category);
+  auto existing = write_processors->find(category);
+  if (existing != write_processors->end()) {
+    if (existing->second) {
+      existing->second->terminate();
+      this->recover_lost_items(*existing->second);
+    }
+    write_processors->erase(category);
+  }
 }
 
 template <class Category, class Type>
@@ -188,6 +199,21 @@ bool poisson_queue <Category, Type> ::zombie_cleanup() {
   // This has no meaning, but is here so that this function can be added to
   // this object as an action.
   return true;
+}
+
+template <class Category, class Type>
+void poisson_queue <Category, Type> ::recover_lost_items(queue_processor <Type> &processor) {
+  typename queue_processor <Type> ::queue_type recovered;
+  processor.recover_lost_items(recovered);
+  if (!recovered.empty()) {
+    auto write_queue = queue.get_write();
+    assert(write_queue);
+    while (!recovered.empty()) {
+      // NOTE: Recovered items are *prepended* to the queue.
+      write_queue->push_front(std::move(recovered.back()));
+      recovered.pop_back();
+    }
+  }
 }
 
 #endif //poisson_queue_hpp

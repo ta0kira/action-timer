@@ -51,6 +51,7 @@ public:
   void terminate();
   bool is_terminated() const;
 
+  bool requeue_item(Type item);
   bool transfer_next_item(queue_type &from);
   bool empty();
   bool dequeue(Type &removed);
@@ -73,7 +74,7 @@ public:
   using queue_type = typename blocking_strict_queue <Type> ::queue_type;
   using locked_queue = lc::locking_container_base <queue_type>;
 
-  queue_processor(std::function <bool(Type)> new_action, unsigned int new_capacity = 1) :
+  queue_processor(std::function <bool(Type&)> new_action, unsigned int new_capacity = 1) :
   terminated(false), action(new_action), queue(new_capacity) {}
 
   void start();
@@ -92,7 +93,7 @@ private:
   std::atomic <bool> terminated;
   std::unique_ptr <std::thread> thread;
 
-  std::function <bool(Type)>   action;
+  std::function <bool(Type&)>  action;
   blocking_strict_queue <Type> queue;
 };
 
@@ -107,6 +108,18 @@ void blocking_strict_queue <Type> ::terminate() {
 template <class Type>
 bool blocking_strict_queue <Type> ::is_terminated() const {
   return terminated;
+}
+
+template <class Type>
+bool blocking_strict_queue <Type> ::requeue_item(Type item) {
+  std::unique_lock <std::mutex> local_lock(empty_lock);
+  if (terminated || queue.size() >= capacity) {
+    return false;
+  } else {
+    queue.push_front(std::move(item));
+    empty_wait.notify_all();
+    return true;
+  }
 }
 
 template <class Type>
@@ -211,7 +224,8 @@ void queue_processor <Type> ::processor_thread() {
     if (!queue.dequeue(removed)) {
       break;
     } else {
-      if (!action(std::move(removed))) {
+      if (!action(removed)) {
+        queue.requeue_item(std::move(removed));
         break;
       }
     }
