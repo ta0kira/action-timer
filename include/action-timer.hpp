@@ -97,10 +97,10 @@ public:
   // NOTE: A callback is used rather than a virtual function to avoid a race
   // condition when destructing while trying to execute the action.
 
-  explicit async_action(std::function <bool()> new_action = nullptr) :
+  explicit async_action(std::function <void()> new_action = nullptr) :
   destructor_called(false), action_waiting(), action(new_action) {}
 
-  void set_action(std::function <bool()> new_action);
+  void set_action(std::function <void()> new_action);
   void start() override;
   bool trigger_action() override;
 
@@ -117,7 +117,7 @@ private:
   std::unique_ptr <std::thread> thread;
 
   bool action_waiting;
-  std::function <bool()> action;
+  std::function <void()> action;
 
   std::mutex               action_lock;
   std::condition_variable  action_wait;

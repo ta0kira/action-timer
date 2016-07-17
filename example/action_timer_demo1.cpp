@@ -25,23 +25,23 @@ int main() {
   // This action will happen ~0.1 times per second.
   timer.set_category('B', 0.1);
 
-  // async_action doesn't *cause* the timer to block. This is helpful for long-
+  // async_action *doesn't* cause the timer to block. This is helpful for long-
   // running actions, and for actions that are going to change the state of the
   // action_timer.
   action_timer <char> ::generic_action B_action(new async_action(
     [&timer] {
       std::cout << "B is stopping the timer." << std::endl;
       timer.async_stop();
-      return true;
     }));
 
   timer.set_action('B', std::move(B_action));
 
 
-  // This action will happen ~0.25 times per second.
-  timer.set_category('C', 0.25);
+  // This action will happen ~0.5 times per second.
+  timer.set_category('C', 0.5);
 
-  // Returning false will cause the action_timer to remove the action.
+  // Returning false will cause the action_timer to remove the action. This has
+  // no effect on the other actions that are still registered.
   action_timer <char> ::generic_action C_action(new sync_action(
     [&timer] {
       std::cout << "C has failed." << std::endl;

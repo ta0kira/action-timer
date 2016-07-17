@@ -80,7 +80,7 @@ void precise_timer::spinlock_finish() const {
   }
 }
 
-void async_action::set_action(std::function <bool()> new_action) {
+void async_action::set_action(std::function <void()> new_action) {
   action = new_action;
 }
 

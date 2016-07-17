@@ -18,7 +18,7 @@ fact, it doesn't even compile into a library yet.
 ### Background
 
 `category_tree` is a representation of a [categorical distribution][categorical].
-Anexample of this is a 6-sided die where the different numbers have different
+An example of this is a 6-sided die where the different numbers have different
 probabilities.
 
 I ended up writing a special class for this for efficiency reasons. I've needed
@@ -56,8 +56,9 @@ Imagine that you have _n_ categories each with independent sizes, e.g., **A**
 with size 1, **B** with size 5, and **C** with size 4:
 
 ```text
+0 1         6       10
 |-|---------|-------|
-0 A         B       C
+ A     B        C
 ```
 
 This obviously won't work as a categorical distribution, since the parts add up
@@ -67,9 +68,9 @@ number is 0.56, we can search for 5.6:
 
 ```text
          ~5.6
-           |
+0 1        |6       10
 |-|---------|-------|
-0 A         B       C
+ A     B        C
 ```
 
 Here we choose **B**. Fine. This is how it normally works.
@@ -141,10 +142,10 @@ $ ./category_tree_demo2
 
 ### Background
 
-`action_timer` is an even timer that triggers real-time events that are
+`action_timer` is an event timer that triggers real-time events that are
 [Poisson-distributed][poisson] in the time dimension. For each action, you
 specify a _&lambda;_ parameter that indicates how often, on average, the action
- shouldoccur per second, and the `action_timer` generates events accordingly.
+ should occur per second, and the `action_timer` generates events accordingly.
 
 **Why would you ever want this?**
 
@@ -194,23 +195,23 @@ int main() {
   // This action will happen ~0.1 times per second.
   timer.set_category('B', 0.1);
 
-  // async_action doesn't *cause* the timer to block. This is helpful for long-
+  // async_action *doesn't* cause the timer to block. This is helpful for long-
   // running actions, and for actions that are going to change the state of the
   // action_timer.
   action_timer <char> ::generic_action B_action(new async_action(
     [&timer] {
       std::cout << "B is stopping the timer." << std::endl;
       timer.async_stop();
-      return true;
     }));
 
   timer.set_action('B', std::move(B_action));
 
 
-  // This action will happen ~0.25 times per second.
-  timer.set_category('C', 0.25);
+  // This action will happen ~0.5 times per second.
+  timer.set_category('C', 0.5);
 
-  // Returning false will cause the action_timer to remove the action.
+  // Returning false will cause the action_timer to remove the action. This has
+  // no effect on the other actions that are still registered.
   action_timer <char> ::generic_action C_action(new sync_action(
     [&timer] {
       std::cout << "C has failed." << std::endl;
@@ -277,7 +278,6 @@ int main() {
   // the category label should be.
   action_timer <std::string> ::generic_action zombie_action(new async_action([&queue] {
     queue.zombie_cleanup();
-    return true;
   }));
   queue.set_action("zombie_cleanup", std::move(zombie_action), 1.0);
 
