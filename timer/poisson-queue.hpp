@@ -171,29 +171,19 @@ void poisson_queue <Category, Type> ::remove_action(const Category &category) {
 
 template <class Category, class Type>
 bool poisson_queue <Category, Type> ::zombie_cleanup() {
-  typename queue_processor <Type> ::queue_type recovered;
   auto write_processors = processors.get_write();
   assert(write_processors);
   for (auto current = write_processors->begin(); current != write_processors->end();) {
     if (!current->second || current->second->is_terminated()) {
       auto removed = current++;
       if (removed->second) {
-        removed->second->recover_lost_items(recovered);
+        this->recover_lost_items(*removed->second);
       }
       actions.set_category(removed->first, 0.0);
       actions.set_action(removed->first, nullptr);
       write_processors->erase(removed);
     } else {
       ++current;
-    }
-  }
-  if (!recovered.empty()) {
-    auto write_queue = queue.get_write();
-    assert(write_queue);
-    while (!recovered.empty()) {
-      // NOTE: Recovered items are *prepended* to the queue.
-      write_queue->push_front(std::move(recovered.back()));
-      recovered.pop_back();
     }
   }
   // This has no meaning, but is here so that this function can be added to

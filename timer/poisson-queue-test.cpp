@@ -44,7 +44,7 @@ int main(int argc, char *argv[]) {
   // unique_ptr isn't necessary, but it helps test move correctness.
   typedef std::unique_ptr <int> stored_type;
 
-  poisson_queue <std::string, stored_type> queue;
+  poisson_queue <std::string, stored_type> queue(1, [] { return new precise_timer(0.01, 0.0001); });
   queue.start();
 
   // NOTE: Needs to be async_action to avoid a deadlock!

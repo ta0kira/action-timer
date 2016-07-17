@@ -156,6 +156,10 @@ public:
   explicit action_timer(unsigned int threads = 1, int seed = time(nullptr)) :
   thread_count(threads), stop_called(true), stopped(true), generator(seed) {}
 
+  explicit action_timer(unsigned int threads, std::function <sleep_timer*()> factory,
+                        int seed = time(nullptr)) :
+  thread_count(threads), timer_factory(factory), stop_called(true), stopped(true), generator(seed) {}
+
   // NOTE: It's an error to call this when threads are running.
   void set_timer_factory(std::function <sleep_timer*()> factory);
 
