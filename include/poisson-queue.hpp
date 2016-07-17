@@ -57,6 +57,8 @@ public:
   // TODO: Add a version that adds multiple items, e.g., with iterators.
   void queue_item(Type item);
 
+  bool empty();
+
   // The action doesn't use queue data.
   void set_action(const Category &category,
                   typename action_timer <Category> ::generic_action action,
@@ -101,6 +103,12 @@ void poisson_queue <Category, Type> ::queue_item(Type item) {
   auto write_queue = queue.get_write();
   assert(write_queue);
   write_queue->push_back(std::move(item));
+}
+
+template <class Category, class Type>
+bool poisson_queue <Category, Type> ::empty() {
+  auto write_queue = queue.get_write();
+  return write_queue->empty();
 }
 
 template <class Category, class Type>
