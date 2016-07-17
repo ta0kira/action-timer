@@ -106,7 +106,7 @@ process_input() {
   done
 }
 
-cd "$(dirname "$0")" || exit 1
+cd "$(dirname "$0")/.." || exit 1
 
 cmake . && make poisson-printer || exit 1
 
