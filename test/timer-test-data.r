@@ -10,7 +10,7 @@ for (log.min.sleep in 2:6) {
   # NOTE: Calling format with all three at once will turn l and count into
   # floating-points.
   args <- sapply(c(l,count,0.1^log.min.sleep),function(x) format(x,scientific=FALSE))
-  command <- paste(c('./timer-test-data',args),collapse=' ')
+  command <- paste(c('../timer-test-data',args),collapse=' ')
   write(command,file=standard_out)
 
   data.raw <- system(command,intern=TRUE)

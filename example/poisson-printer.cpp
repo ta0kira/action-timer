@@ -148,7 +148,6 @@ int main(int argc, char *argv[]) {
       if (lambda > 0) {
         action.reset(new async_action([text] {
           print_action(text);
-          return true;
         }));
       }
       actions.set_action(category, std::move(action));
