@@ -47,6 +47,16 @@ int main(int argc, char *argv[]) {
   poisson_queue <std::string, stored_type> queue(1, [] { return new precise_timer(0.01, 0.0001); });
   queue.start();
 
+  if (argc > 1) {
+    double scale = 0.0;
+    char error;
+    if (sscanf(argv[1], "%lf%c", &scale, &error) != 1) {
+      fprintf(stderr, "%s: Failed to parse scale from \"%s\".\n", argv[0], argv[1]);
+      return 1;
+    }
+    queue.set_scale(scale);
+  }
+
   // NOTE: Needs to be async_action to avoid a deadlock!
   action_timer <std::string> ::generic_action zombie_action(new async_action([&queue] {
     queue.zombie_cleanup();
@@ -75,7 +85,13 @@ int main(int argc, char *argv[]) {
     } else {
       queue.set_processor(category,
         [category,lambda](stored_type &value) {
-          // TODO: Add some sort of failure condition.
+          if (*value > 0 && *value % 256 == 0) {
+            // An arbitrary failure condition.
+            std::cout << category << " failed: " << *value << std::endl;
+            // (Change the value so that it actually gets processed later.)
+            *value *= -1;
+            return false;
+          }
           std::cout << category << ": " << *value << std::endl;
           std::this_thread::sleep_for(
             std::chrono::duration <double> (1.0 / lambda));

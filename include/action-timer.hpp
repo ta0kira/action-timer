@@ -153,15 +153,17 @@ public:
   // multiplied by n, which decreases the ratio of overhead to actual sleeping
   // time, which allows shorter sleeps to be more accurate.
   explicit action_timer(unsigned int threads = 1, int seed = time(nullptr)) :
-  thread_count(threads), stop_called(true), stopped(true), generator(seed) {}
+  thread_count(threads), stop_called(true), stopped(true), generator(seed), locked_scale(1.0) {}
 
   explicit action_timer(unsigned int threads, std::function <sleep_timer*()> factory,
                         int seed = time(nullptr)) :
   thread_count(threads), timer_factory(std::move(factory)), stop_called(true),
-  stopped(true), generator(seed) {}
+  stopped(true), generator(seed), locked_scale(1.0) {}
 
   // NOTE: It's an error to call this when threads are running.
   void set_timer_factory(std::function <sleep_timer*()> factory);
+
+  void set_scale(double scale);
 
   void set_category(const Category &category, double lambda);
 
@@ -228,6 +230,8 @@ private:
   std::uniform_real_distribution <double> uniform;
   std::exponential_distribution <double>  exponential;
 
+  lc::locking_container <double, lc::rw_lock> locked_scale;
+
   locked_category_tree locked_categories;
   locked_action_map    locked_actions;
 };
@@ -237,6 +241,13 @@ template <class Category>
 void action_timer <Category> ::set_timer_factory(std::function <sleep_timer*()> factory) {
   assert(this->is_stopped());
   timer_factory.swap(factory);
+}
+
+template <class Category>
+void action_timer <Category> ::set_scale(double scale) {
+  auto scale_write = locked_scale.get_write();
+  assert(scale_write);
+  *scale_write = scale;
 }
 
 template <class Category>
@@ -348,8 +359,13 @@ void action_timer <Category> ::thread_loop(unsigned int thread_number) {
   std::unique_ptr <sleep_timer> timer(timer_factory? timer_factory() : new precise_timer);
 
   while (!stop_called) {
+    auto scale_read = locked_scale.get_read_auth(auth);
+    assert(scale_read);
+
     const double category_uniform = uniform(generator);
-    const double time_exponential = exponential(generator);
+    const double time_exponential = exponential(generator) / *scale_read;
+
+    scale_read.clear();
 
     // NOTE: Category selection comes before sleep, so that the sleep
     // corresponds to the categories available when it starts. This makes the

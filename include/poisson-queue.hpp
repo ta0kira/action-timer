@@ -60,6 +60,10 @@ public:
 
   bool empty();
 
+  void set_scale(double scale) {
+    actions.set_scale(scale);
+  }
+
   // The action doesn't use queue data.
   void set_action(const Category &category,
                   typename action_timer <Category> ::generic_action action,
