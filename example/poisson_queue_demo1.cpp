@@ -21,6 +21,7 @@ int main() {
   // the category label should be.
   action_timer <std::string> ::generic_action zombie_action(new async_action([&queue] {
     queue.zombie_cleanup();
+    return true;
   }));
   queue.set_action("zombie_cleanup", std::move(zombie_action), 1.0);
 

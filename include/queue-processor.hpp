@@ -79,7 +79,7 @@ public:
   using locked_queue = lc::locking_container_base <queue_type>;
 
   queue_processor(std::function <bool(Type&)> new_action, unsigned int new_capacity = 1) :
-  terminated(false), action(new_action), queue(new_capacity) {}
+  terminated(false), action(std::move(new_action)), queue(new_capacity) {}
 
   void start();
   void terminate();

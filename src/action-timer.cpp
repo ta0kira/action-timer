@@ -80,10 +80,6 @@ void precise_timer::spinlock_finish() const {
   }
 }
 
-void async_action::set_action(std::function <void()> new_action) {
-  action = new_action;
-}
-
 void async_action::start() {
   if (!thread) {
     thread.reset(new std::thread([this] { this->thread_loop(); }));
@@ -92,9 +88,11 @@ void async_action::start() {
 
 bool async_action::trigger_action() {
   std::unique_lock <std::mutex> local_lock(action_lock);
-  action_waiting = true;
+  if (!action_error) {
+    action_waiting = true;
+  }
   action_wait.notify_all();
-  return !destructor_called;
+  return !destructor_called && !action_error;
 }
 
 async_action::~async_action() {
@@ -116,15 +114,12 @@ void async_action::thread_loop() {
       action_waiting = false;
     }
     if (action && !destructor_called) {
-      action();
+       if (!action()) {
+         action_error = true;
+         break;
+       }
     }
   }
-}
-
-void sync_action::set_action(std::function <bool()> new_action) {
-  auto write_action = action.get_write();
-  assert(write_action);
-  write_action->swap(new_action);
 }
 
 bool sync_action::trigger_action() {

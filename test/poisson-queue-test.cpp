@@ -50,6 +50,7 @@ int main(int argc, char *argv[]) {
   // NOTE: Needs to be async_action to avoid a deadlock!
   action_timer <std::string> ::generic_action zombie_action(new async_action([&queue] {
     queue.zombie_cleanup();
+    return true;
   }));
   queue.set_action("zombie_cleanup", std::move(zombie_action), 1.0);
 

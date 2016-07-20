@@ -208,6 +208,7 @@ int main() {
     [&timer] {
       std::cout << "B is stopping the timer." << std::endl;
       timer.async_stop();
+      return false;
     }));
 
   timer.set_action('B', std::move(B_action));
@@ -284,6 +285,7 @@ int main() {
   // the category label should be.
   action_timer <std::string> ::generic_action zombie_action(new async_action([&queue] {
     queue.zombie_cleanup();
+    return true;
   }));
   queue.set_action("zombie_cleanup", std::move(zombie_action), 1.0);
 

@@ -36,6 +36,7 @@ either expressed or implied, of the FreeBSD Project.
 #include <functional>
 #include <map>
 #include <memory>
+#include <utility>
 
 #include "action-timer.hpp"
 #include "queue-processor.hpp"
@@ -128,7 +129,7 @@ void poisson_queue <Category, Type> ::set_processor(const Category &category,
                                                     double lambda, unsigned int capacity) {
   // 1. Create and start a new processor.
   std::unique_ptr<queue_processor <Type>> processor(
-    new queue_processor <Type> (process_function, capacity));
+    new queue_processor <Type> (std::move(process_function), capacity));
   processor->start();
   auto *const processor_ptr = processor.get();
   action_timer <std::string> ::generic_action action(

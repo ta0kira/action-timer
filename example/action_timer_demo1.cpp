@@ -32,6 +32,7 @@ int main() {
     [&timer] {
       std::cout << "B is stopping the timer." << std::endl;
       timer.async_stop();
+      return false;
     }));
 
   timer.set_action('B', std::move(B_action));

@@ -40,6 +40,7 @@ either expressed or implied, of the FreeBSD Project.
 #include <mutex>
 #include <random>
 #include <thread>
+#include <utility>
 
 #include <time.h>
 
@@ -97,10 +98,9 @@ public:
   // NOTE: A callback is used rather than a virtual function to avoid a race
   // condition when destructing while trying to execute the action.
 
-  explicit async_action(std::function <void()> new_action = nullptr) :
-  destructor_called(false), action_waiting(), action(new_action) {}
+  explicit async_action(std::function <bool()> new_action = nullptr) :
+  action(std::move(new_action)) {}
 
-  void set_action(std::function <void()> new_action);
   void start() override;
   bool trigger_action() override;
 
@@ -113,11 +113,11 @@ public:
 private:
   void thread_loop();
 
-  std::atomic <bool> destructor_called;
+  std::atomic <bool> destructor_called, action_error;
   std::unique_ptr <std::thread> thread;
 
   bool action_waiting;
-  std::function <void()> action;
+  std::function <bool()> action;
 
   std::mutex               action_lock;
   std::condition_variable  action_wait;
@@ -129,9 +129,8 @@ public:
   // NOTE: new_action must be thread-safe if this is used with an action_timer
   // that has more than one thread!
   explicit sync_action(std::function <bool()> new_action = nullptr) :
-  action(new_action) {}
+  action(std::move(new_action)) {}
 
-  void set_action(std::function <bool()> new_action);
   void start() override {}
   bool trigger_action() override;
 
@@ -158,7 +157,8 @@ public:
 
   explicit action_timer(unsigned int threads, std::function <sleep_timer*()> factory,
                         int seed = time(nullptr)) :
-  thread_count(threads), timer_factory(factory), stop_called(true), stopped(true), generator(seed) {}
+  thread_count(threads), timer_factory(std::move(factory)), stop_called(true),
+  stopped(true), generator(seed) {}
 
   // NOTE: It's an error to call this when threads are running.
   void set_timer_factory(std::function <sleep_timer*()> factory);
@@ -236,7 +236,7 @@ private:
 template <class Category>
 void action_timer <Category> ::set_timer_factory(std::function <sleep_timer*()> factory) {
   assert(this->is_stopped());
-  timer_factory = factory;
+  timer_factory.swap(factory);
 }
 
 template <class Category>
