@@ -51,10 +51,12 @@ public:
   void terminate();
   bool is_terminated() const;
 
-  bool transfer_next_item(queue_type &from);
   bool empty();
+  bool full();
 
-  bool dequeue(Type &removed);
+  bool enqueue(Type &added,   bool block = true);
+  bool dequeue(Type &removed, bool block = true);
+
   bool requeue_item(Type item);
   void done_with_item();
 
@@ -85,7 +87,7 @@ public:
   void terminate();
   bool is_terminated() const;
 
-  bool transfer_next_item(locked_queue &from_queue);
+  bool transfer_next_item(queue_type &from_queue, bool block = false);
   void recover_lost_items(queue_type &to_queue);
 
   // TODO: Somehow pass the remaining data in the queue back to the caller?
@@ -115,30 +117,47 @@ bool blocking_strict_queue <Type> ::is_terminated() const {
 }
 
 template <class Type>
-bool blocking_strict_queue <Type> ::transfer_next_item(queue_type &from) {
-  std::unique_lock <std::mutex> local_lock(empty_lock);
-  if (terminated || queue.size() + in_progress >= capacity || from.empty()) {
-    return false;
-  } else {
-    queue.push_back(std::move(from.front()));
-    from.pop_front();
-    empty_wait.notify_all();
-    return true;
-  }
-}
-
-template <class Type>
 bool blocking_strict_queue <Type> ::empty() {
   std::unique_lock <std::mutex> local_lock(empty_lock);
   return queue.empty();
 }
 
 template <class Type>
-bool blocking_strict_queue <Type> ::dequeue(Type &removed) {
+bool blocking_strict_queue <Type> ::full() {
+  std::unique_lock <std::mutex> local_lock(empty_lock);
+  return queue.size() + in_progress >= capacity;
+}
+
+template <class Type>
+bool blocking_strict_queue <Type> ::enqueue(Type &added, bool block) {
+  while (!terminated) {
+    std::unique_lock <std::mutex> local_lock(empty_lock);
+    if (queue.size() + in_progress >= capacity) {
+      if (block) {
+        empty_wait.wait(local_lock);
+      } else {
+        return false;
+      }
+      continue;
+    } else {
+      queue.push_back(std::move(added));
+      empty_wait.notify_all();
+      return true;
+    }
+  }
+  return false;
+}
+
+template <class Type>
+bool blocking_strict_queue <Type> ::dequeue(Type &removed, bool block) {
   while (!terminated) {
     std::unique_lock <std::mutex> local_lock(empty_lock);
     if (queue.empty()) {
-      empty_wait.wait(local_lock);
+      if (block) {
+        empty_wait.wait(local_lock);
+      } else {
+        return false;
+      }
       continue;
     } else {
       ++in_progress;
@@ -204,15 +223,21 @@ bool queue_processor <Type> ::is_terminated() const {
 }
 
 template <class Type>
-bool queue_processor <Type> ::transfer_next_item(locked_queue &from_queue) {
+bool queue_processor <Type> ::transfer_next_item(queue_type &from_queue, bool block) {
   if (this->is_terminated()) {
     return false;
   }
-  auto write_queue = from_queue.get_write();
-  assert(write_queue);
-  // Should only block if processor_thread is in the process of removing an
-  // item, but hasn't called action yet.
-  return queue.transfer_next_item(*write_queue);
+  if (from_queue.empty()) {
+    return false;
+  }
+  Type temp(std::move(from_queue.front()));
+  from_queue.pop_front();
+  if (queue.enqueue(temp, block)) {
+    return true;
+  } else {
+    from_queue.push_front(std::move(temp));
+    return false;
+  }
 }
 
 template <class Type>

@@ -91,7 +91,7 @@ private:
     lc::locking_container <std::map <Category, std::unique_ptr<queue_processor <Type>>>, lc::dumb_lock>;
 
   // NOTE: Must come before processors and actions!
-  lc::locking_container <typename queue_processor <Type> ::queue_type, lc::dumb_lock> queue;
+  lc::locking_container <typename queue_processor <Type> ::queue_type, lc::dumb_lock> locked_queue;
   // NOTE: Must come before actions!
   locked_processors processors;
   action_timer <Category> actions;
@@ -105,14 +105,15 @@ void poisson_queue <Category, Type> ::start() {
 
 template <class Category, class Type>
 void poisson_queue <Category, Type> ::queue_item(Type item) {
-  auto write_queue = queue.get_write();
+  auto write_queue = locked_queue.get_write();
   assert(write_queue);
   write_queue->push_back(std::move(item));
 }
 
 template <class Category, class Type>
 bool poisson_queue <Category, Type> ::empty() {
-  auto write_queue = queue.get_write();
+  auto write_queue = locked_queue.get_write();
+  assert(write_queue);
   return write_queue->empty();
 }
 
@@ -138,7 +139,9 @@ void poisson_queue <Category, Type> ::set_processor(const Category &category,
   auto *const processor_ptr = processor.get();
   action_timer <std::string> ::generic_action action(
     new sync_action([this,processor_ptr] {
-                      processor_ptr->transfer_next_item(queue);
+                      auto write_queue = locked_queue.get_write();
+                      assert(write_queue);
+                      processor_ptr->transfer_next_item(*write_queue, false);
                       return true;
                     }));
 
@@ -212,7 +215,7 @@ void poisson_queue <Category, Type> ::recover_lost_items(queue_processor <Type> 
   typename queue_processor <Type> ::queue_type recovered;
   processor.recover_lost_items(recovered);
   if (!recovered.empty()) {
-    auto write_queue = queue.get_write();
+    auto write_queue = locked_queue.get_write();
     assert(write_queue);
     while (!recovered.empty()) {
       // NOTE: Recovered items are *prepended* to the queue.
