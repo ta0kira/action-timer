@@ -63,7 +63,8 @@ public:
     node_type::update_category(root, category, new_size);
   }
 
-  void update_category(const Category &category, const std::function <Size(Size)> &update) {
+  void update_category(const Category &category,
+                       const std::function <Size(Size)> &update) {
     node_type::update_category(root, category, update);
   }
 
@@ -89,7 +90,7 @@ public:
   using optional_node = std::unique_ptr <category_node>;
 
   category_node(const Category &new_category, Size new_size) :
-  category(new_category), size(new_size), height(1), total_size() {}
+  category(new_category), size(new_size), height(1) {}
 
   Size get_total_size() const {
     return total_size;
@@ -127,7 +128,7 @@ public:
     // Not in first part => move to second.
     if (low_child) check_size -= low_child->total_size;
     // NOTE: Checking high_child prevents problems below if there is a precision
-    // error that makes size >= size.
+    // error that makes check_size >= size.
     if (!high_child || check_size < size) {
       return category;
     }
@@ -202,11 +203,8 @@ private:
     if (current) {
       current->update_size();
       current->update_height();
-      if (current->get_balance() < -1) {
-        pivot_high(current);
-      }
-      if (current->get_balance() > 1) {
-        pivot_low(current);
+      if (abs(current->get_balance()) > 1) {
+        (current->get_balance() > 1 ? pivot_low : pivot_high)(current);
       }
     }
   }
@@ -223,6 +221,7 @@ private:
     current.swap(temp);
     temp->high_child.swap(current->low_child);
     temp.swap(current->low_child);
+    assert(!temp);
     // Update.
     if (current->low_child) {
       current->low_child->update_size();
@@ -244,6 +243,7 @@ private:
     current.swap(temp);
     temp->low_child.swap(current->high_child);
     temp.swap(current->high_child);
+    assert(!temp);
     // Update.
     if (current->high_child) {
       current->high_child->update_size();
@@ -254,74 +254,66 @@ private:
   }
 
   static void remove_node(optional_node &current, optional_node &removed) {
-    optional_node *swap_with = nullptr;
-    if (!current->low_child) {
-      swap_with = &current->high_child;
-    }
-    if (!current->high_child) {
-      swap_with = &current->low_child;
-    }
-    if (swap_with) {
-      optional_node discard;
-      discard.swap(*swap_with);
-      discard.swap(current);
-      removed.swap(discard);
-      assert(removed);
-      removed->update_size();
-      removed->update_height();
-      return;
-    }
+    assert(!removed);
     optional_node new_parent;
     if (current->get_balance() < 0) {
       remove_highest_node(current->low_child, new_parent);
-      assert(new_parent);
     } else {
       remove_lowest_node(current->high_child, new_parent);
-      assert(new_parent);
     }
-    assert(new_parent);
-    assert(!new_parent->low_child);
-    assert(!new_parent->high_child);
-    // Swap new_parent and current.
-    current->low_child.swap(new_parent->low_child);
-    current->high_child.swap(new_parent->high_child);
+    if (new_parent) {
+      assert(!new_parent->low_child);
+      assert(!new_parent->high_child);
+      // Swap new_parent and current.
+      current->low_child.swap(new_parent->low_child);
+      current->high_child.swap(new_parent->high_child);
+    }
     current.swap(new_parent);
     // new_parent contains the removed node.
     new_parent.swap(removed);
-    current->update_size();
-    current->update_height();
+    assert(!new_parent);
+    assert(removed);
+    // Update nodes.
+    if (current) {
+      current->update_size();
+      current->update_height();
+    }
     removed->update_size();
     removed->update_height();
   }
 
   static void remove_lowest_node(optional_node &current, optional_node &removed) {
-    assert(current);
-    if (!current->low_child) {
-      optional_node discard;
-      discard.swap(current->high_child);
-      discard.swap(current);
-      removed.swap(discard);
-    } else {
-      remove_lowest_node(current->low_child, removed);
-      update_and_rebalance(current);
+    assert(!removed);
+    if (current) {
+      if (!current->low_child) {
+        optional_node discard;
+        discard.swap(current->high_child);
+        discard.swap(current);
+        removed.swap(discard);
+      } else {
+        remove_lowest_node(current->low_child, removed);
+        update_and_rebalance(current);
+      }
     }
   }
 
   static void remove_highest_node(optional_node &current, optional_node &removed) {
-    assert(current);
-    if (!current->high_child) {
-      optional_node discard;
-      discard.swap(current->low_child);
-      discard.swap(current);
-      removed.swap(discard);
-    } else {
-      remove_highest_node(current->high_child, removed);
-      update_and_rebalance(current);
+    assert(!removed);
+    if (current) {
+      if (!current->high_child) {
+        optional_node discard;
+        discard.swap(current->low_child);
+        discard.swap(current);
+        removed.swap(discard);
+      } else {
+        remove_highest_node(current->high_child, removed);
+        update_and_rebalance(current);
+      }
     }
   }
 
   const Category category;
-  Size       size;
+  Size           size;
 
   int  height;
   Size total_size;
