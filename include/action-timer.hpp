@@ -33,6 +33,7 @@ either expressed or implied, of the FreeBSD Project.
 #define action_timer_hpp
 
 #include <atomic>
+#include <chrono>
 #include <condition_variable>
 #include <list>
 #include <memory>
@@ -117,7 +118,7 @@ private:
   std::unique_ptr <std::thread> thread;
 
   bool action_waiting;
-  std::function <bool()> action;
+  const std::function <bool()> action;
 
   std::mutex               action_lock;
   std::condition_variable  action_wait;
@@ -138,7 +139,7 @@ public:
   ~sync_action() override;
 
 private:
-  typedef lc::locking_container <std::function <bool()>, lc::rw_lock> locked_action;
+  typedef lc::locking_container <const std::function <bool()>, lc::r_lock> locked_action;
 
   locked_action action;
 };

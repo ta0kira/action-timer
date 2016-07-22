@@ -99,7 +99,8 @@ private:
   std::atomic <bool> terminated;
   std::unique_ptr <std::thread> thread;
 
-  std::function <bool(Type&)>  action;
+  const std::function <bool(Type&)> action;
+
   blocking_strict_queue <Type> queue;
 };
 
