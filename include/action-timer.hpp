@@ -166,7 +166,7 @@ public:
 
   void set_scale(double scale);
 
-  void set_category(const Category &category, double lambda);
+  void set_timer(const Category &category, double lambda);
 
   // Ideally, async_action (or similar) should be used so that the amount of
   // time spent on the action by the timer thread is extremely small, with the
@@ -252,7 +252,7 @@ void action_timer <Category> ::set_scale(double scale) {
 }
 
 template <class Category>
-void action_timer <Category> ::set_category(const Category &category, double lambda) {
+void action_timer <Category> ::set_timer(const Category &category, double lambda) {
   lc::lock_auth_base::auth_type auth(new lc::lock_auth <lc::w_lock>);
   auto category_write = locked_categories.get_write_auth(auth);
   assert(category_write);
@@ -414,7 +414,7 @@ void action_timer <Category> ::thread_loop(unsigned int thread_number) {
     if (remove) {
       action_read.clear();
       assert(!action_read);
-      this->set_category(category, 0.0);
+      this->set_timer(category, 0.0);
       this->set_action(category, nullptr);
     }
   }

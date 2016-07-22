@@ -156,7 +156,7 @@ int main(int argc, char *argv[]) {
                                  printer.append_time(t);
                               });
   });
-  actions.set_category(0, lambda);
+  actions.set_timer(0, lambda);
 
   std::unique_ptr <abstract_action> action(new sync_action([&printer] {
                                              printer.action();

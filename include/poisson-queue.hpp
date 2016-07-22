@@ -122,7 +122,7 @@ void poisson_queue <Category, Type> ::set_action(const Category &category,
                                                  typename action_timer <Category> ::generic_action action,
                                                  double lambda) {
   actions.set_action(category, std::move(action));
-  actions.set_category(category, lambda);
+  actions.set_timer(category, lambda);
   auto write_processors = processors.get_write();
   assert(write_processors);
   write_processors->erase(category);
@@ -163,14 +163,14 @@ void poisson_queue <Category, Type> ::set_processor(const Category &category,
   // 4. Update (or add) the category for consideration.
   // TODO: Maybe this should be the only action if the processor already
   // exists? Might not work, since the processor's queue is based on lambda.
-  actions.set_category(category, lambda);
+  actions.set_timer(category, lambda);
 }
 
 template <class Category, class Type>
 void poisson_queue <Category, Type> ::remove_action(const Category &category) {
   // NOTE: Removing a processor will result in the queued data being lost!
   // 1. Remove the category from consideration.
-  actions.set_category(category, 0.0);
+  actions.set_timer(category, 0.0);
 
   // 2. Remove the category's action.
   actions.set_action(category, nullptr);
@@ -198,7 +198,7 @@ bool poisson_queue <Category, Type> ::zombie_cleanup() {
       if (removed->second) {
         this->recover_lost_items(*removed->second);
       }
-      actions.set_category(removed->first, 0.0);
+      actions.set_timer(removed->first, 0.0);
       actions.set_action(removed->first, nullptr);
       write_processors->erase(removed);
     } else {

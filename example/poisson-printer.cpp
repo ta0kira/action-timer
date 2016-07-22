@@ -121,7 +121,7 @@ bool expand_escapes(std::string &escaped) {
 
 int main(int argc, char *argv[]) {
   action_timer <std::string> actions;
-  actions.set_category("check_for_updates", 1.0);
+  actions.set_timer("check_for_updates", 1.0);
   actions.start();
 
   std::string input;
@@ -142,7 +142,7 @@ int main(int argc, char *argv[]) {
       fprintf(stderr, "%s: Failed to parse \"%s\".\n", argv[0], input.c_str());
       continue;
     }
-    actions.set_category(category, lambda);
+    actions.set_timer(category, lambda);
     if (category != "check_for_updates") {
       action_timer <std::string> ::generic_action action;
       if (lambda > 0) {

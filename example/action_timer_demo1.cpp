@@ -10,7 +10,7 @@ int main() {
 
 
   // This action will happen ~10 times per second.
-  timer.set_category('A', 10.0);
+  timer.set_timer('A', 10.0);
 
   // sync_action causes the timer to block while the action is being executed.
   action_timer <char> ::generic_action A_action(new sync_action(
@@ -23,7 +23,7 @@ int main() {
 
 
   // This action will happen ~0.1 times per second.
-  timer.set_category('B', 0.1);
+  timer.set_timer('B', 0.1);
 
   // async_action *doesn't* cause the timer to block. This is helpful for long-
   // running actions, and for actions that are going to change the state of the
@@ -39,7 +39,7 @@ int main() {
 
 
   // This action will happen ~0.5 times per second.
-  timer.set_category('C', 0.5);
+  timer.set_timer('C', 0.5);
 
   // Returning false will cause the action_timer to remove the action. This has
   // no effect on the other actions that are still registered.

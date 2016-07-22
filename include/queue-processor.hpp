@@ -87,6 +87,7 @@ public:
   void terminate();
   bool is_terminated() const;
 
+  bool enqueue(Type &added, bool block = false);
   bool transfer_next_item(queue_type &from_queue, bool block = false);
   void recover_lost_items(queue_type &to_queue);
 
@@ -221,6 +222,11 @@ void queue_processor <Type> ::terminate() {
 template <class Type>
 bool queue_processor <Type> ::is_terminated() const {
   return terminated || queue.is_terminated();
+}
+
+template <class Type>
+bool queue_processor <Type> ::enqueue(Type &added, bool block) {
+  return queue.enqueue(added, block);
 }
 
 template <class Type>
