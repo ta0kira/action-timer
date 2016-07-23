@@ -29,8 +29,8 @@ either expressed or implied, of the FreeBSD Project.
 
 // Author: Kevin P. Barry [ta0kira@gmail.com] [kevinbarry@google.com]
 
-#ifndef queue_processor_hpp
-#define queue_processor_hpp
+#ifndef queue_processor_base_hpp
+#define queue_processor_base_hpp
 
 #include <atomic>
 #include <functional>
@@ -74,13 +74,13 @@ private:
 };
 
 template <class Type>
-class queue_processor {
+class queue_processor_base {
 public:
   using queue_type = typename blocking_strict_queue <Type> ::queue_type;
   using locked_queue = lc::locking_container_base <queue_type>;
 
-  queue_processor(std::function <bool(Type&)> new_action, unsigned int new_capacity = 1) :
-  terminated(), action(std::move(new_action)), queue(new_capacity) {}
+  queue_processor_base(unsigned int new_capacity = 1) :
+  terminated(), queue(new_capacity) {}
 
   void start();
   void terminate();
@@ -90,20 +90,33 @@ public:
   bool transfer_next_item(queue_type &from_queue, bool block = false);
   void recover_lost_items(queue_type &to_queue);
 
-  // TODO: Somehow pass the remaining data in the queue back to the caller?
-  ~queue_processor();
+  ~queue_processor_base();
 
 private:
+  virtual bool action(Type &item) = 0;
+
   void processor_thread();
 
   std::atomic <bool> terminated;
   std::unique_ptr <std::thread> thread;
 
-  const std::function <bool(Type&)> action;
-
   blocking_strict_queue <Type> queue;
 };
 
+template <class Type>
+class queue_processor : public queue_processor_base <Type> {
+public:
+  queue_processor(std::function <bool(Type&)> new_action, unsigned int new_capacity = 1) :
+  queue_processor_base <Type> (new_capacity), action_callback(std::move(new_action)) {}
+
+private:
+  bool action(Type &item) override {
+    assert(action_callback);
+    return action_callback(item);
+  }
+
+  const std::function <bool(Type&)> action_callback;
+};
 
 template <class Type>
 void blocking_strict_queue <Type> ::terminate() {
@@ -206,30 +219,30 @@ blocking_strict_queue <Type> ::~blocking_strict_queue() {
 
 
 template <class Type>
-void queue_processor <Type> ::start() {
+void queue_processor_base <Type> ::start() {
   assert(!thread && !this->is_terminated());
   thread.reset(new std::thread([this] { this->processor_thread(); }));
 }
 
 template <class Type>
-void queue_processor <Type> ::terminate() {
+void queue_processor_base <Type> ::terminate() {
   terminated = true;
   // NOTE: This causes the thread to continue if blocked.
   queue.terminate();
 }
 
 template <class Type>
-bool queue_processor <Type> ::is_terminated() const {
+bool queue_processor_base <Type> ::is_terminated() const {
   return terminated || queue.is_terminated();
 }
 
 template <class Type>
-bool queue_processor <Type> ::enqueue(Type &added, bool block) {
+bool queue_processor_base <Type> ::enqueue(Type &added, bool block) {
   return queue.enqueue(added, block);
 }
 
 template <class Type>
-bool queue_processor <Type> ::transfer_next_item(queue_type &from_queue, bool block) {
+bool queue_processor_base <Type> ::transfer_next_item(queue_type &from_queue, bool block) {
   if (this->is_terminated()) {
     return false;
   }
@@ -247,13 +260,13 @@ bool queue_processor <Type> ::transfer_next_item(queue_type &from_queue, bool bl
 }
 
 template <class Type>
-void queue_processor <Type> ::recover_lost_items(queue_type &to_queue) {
+void queue_processor_base <Type> ::recover_lost_items(queue_type &to_queue) {
   assert(this->is_terminated());
   queue.recover_lost_items(to_queue);
 }
 
 template <class Type>
-queue_processor <Type> ::~queue_processor() {
+queue_processor_base <Type> ::~queue_processor_base() {
   this->terminate();
   if (thread) {
     thread->join();
@@ -261,14 +274,13 @@ queue_processor <Type> ::~queue_processor() {
 }
 
 template <class Type>
-void queue_processor <Type> ::processor_thread() {
-  assert(action);
+void queue_processor_base <Type> ::processor_thread() {
   while (!this->is_terminated()) {
     Type removed;
     if (!queue.dequeue(removed)) {
       break;
     } else {
-      if (!action(removed)) {
+      if (!this->action(removed)) {
         queue.requeue_item(std::move(removed));
         break;
       } else {
@@ -281,4 +293,4 @@ void queue_processor <Type> ::processor_thread() {
   this->terminate();
 }
 
-#endif //queue_processor_hpp
+#endif //queue_processor_base_hpp

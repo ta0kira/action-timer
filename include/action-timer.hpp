@@ -72,6 +72,7 @@ public:
   void set_timer_factory(std::function <sleep_timer*()> factory);
 
   void set_scale(double scale);
+  double get_scale();
 
   bool set_timer(const Category &category, double lambda, bool overwrite = true);
   void erase_timer(const Category &category);
@@ -160,6 +161,13 @@ void action_timer <Category> ::set_scale(double scale) {
   auto scale_write = locked_scale.get_write();
   assert(scale_write);
   *scale_write = scale;
+}
+
+template <class Category>
+double action_timer <Category> ::get_scale() {
+  auto scale_read = locked_scale.get_read();
+  assert(scale_read);
+  return *scale_read;
 }
 
 template <class Category>

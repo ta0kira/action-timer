@@ -30,6 +30,7 @@ either expressed or implied, of the FreeBSD Project.
 // Author: Kevin P. Barry [ta0kira@gmail.com] [kevinbarry@google.com]
 
 #include <chrono>
+#include <cmath>
 #include <iostream>
 #include <string>
 #include <utility>
@@ -55,9 +56,28 @@ std::ostream &operator << (std::ostream &out, const sensor_data &data) {
 using optional_sensor_data  = std::unique_ptr <sensor_data>;
 using sensor_data_processor = queue_processor <optional_sensor_data>;
 
-bool process_sensor_data(optional_sensor_data &data) {
+bool process_sensor_data(action_timer <std::string> &timer,
+                         optional_sensor_data &data) {
   assert(data);
-  std::cout << "Processing sample: " << *data << std::endl;
+  std::cerr << "Processing sample: " << *data << std::endl;
+  const double time = data->time.count() / 1000000.0;
+  const double current_scale = timer.get_scale();
+
+  // Arbitrary "alert" condition, which causes timing to scale by 25x. This
+  // simulates a situation where incoming sensor data is much more time-
+  // sensitive than usual.
+  const bool alert_state = fmod(time, 10) < 3.0;
+  if (alert_state) {
+    if (current_scale != 25.0) {
+      std::cerr << "In alert state." << std::endl;
+      timer.set_scale(25.0);
+    }
+  } else {
+    if (current_scale != 1.0) {
+      std::cerr << "In normal state." << std::endl;
+      timer.set_scale(1.0);
+    }
+  }
   return true;
 }
 
@@ -68,13 +88,13 @@ public:
   base_time(time), label(new_label), processor(new_processor) {}
 
   ~sensor_reader() override {
-    // Call terminate before ~async_action does so that the thread is stopped
-    // before the members of this instance destruct.
+    // Call terminate before ~async_action_base does so that the thread is
+    // stopped before the members of this instance destruct.
     this->terminate();
   }
 
 private:
-  bool action() {
+  bool action() override {
     optional_sensor_data new_data(new sensor_data {
       std::chrono::duration_cast <std::chrono::microseconds> (
         std::chrono::high_resolution_clock::now().time_since_epoch()) - base_time,
@@ -93,9 +113,15 @@ private:
 
 bool find_new_sensors(action_timer <std::string> &timer,
                       sensor_data_processor &processor,
-                      std::chrono::microseconds base_time) {
+                      std::chrono::microseconds base_time,
+                      const std::string &my_name) {
+  if (processor.is_terminated()) {
+    std::cerr << "Processor is terminated => stopping timer." << std::endl;
+    return false;
+  }
+
   std::string input;
-  if (!std::getline(std::cin, input)){
+  if (!std::getline(std::cin, input)) {
     std::cerr << "Unable to check for new sensors => stopping timer." << std::endl;
     timer.async_stop();
     return false;
@@ -108,10 +134,22 @@ bool find_new_sensors(action_timer <std::string> &timer,
     return true;
   }
 
-  if (lambda <= 0.0 && timer.action_exists(category)) {
-    std::cerr << "Stopping sensor " << category << "." << std::endl;
-    timer.erase_action(category);
-    timer.erase_timer(category);
+  if (category == my_name) {
+    if (lambda <= 0.0) {
+      std::cerr << "Refusing to remove " << category << "." << std::endl;
+    } else {
+      std::cerr << "Changing timing for " << category << "." << std::endl;
+      timer.set_timer(category, lambda);
+    }
+    return true;
+  }
+
+  if (lambda <= 0.0) {
+    if (timer.action_exists(category)) {
+      std::cerr << "Stopping sensor " << category << "." << std::endl;
+      timer.erase_action(category);
+      timer.erase_timer(category);
+    }
     return true;
   }
 
@@ -124,10 +162,10 @@ bool find_new_sensors(action_timer <std::string> &timer,
     return true;
   }
 
+  std::cerr << "Starting sensor " << category << "." << std::endl;
   action_timer <std::string> ::generic_action sensor(new sensor_reader(category, processor, base_time));
   timer.set_timer(category, lambda);
   timer.set_action(category, std::move(sensor));
-  std::cerr << "Starting sensor " << category << "." << std::endl;
   return true;
 }
 
@@ -140,15 +178,18 @@ int main(int argc, char *argv[]) {
   const auto base_time = std::chrono::duration_cast <std::chrono::microseconds> (
     std::chrono::high_resolution_clock::now().time_since_epoch());
 
-  sensor_data_processor processor(&process_sensor_data);
+  sensor_data_processor processor([&timer](optional_sensor_data &data) {
+    return process_sensor_data(timer, data);
+  });
   processor.start();
 
+  const std::string find_new_sensors_label("find_new_sensors");
   action_timer <std::string> ::generic_action find_new_sensors_action(
-    new async_action([&timer,&processor,base_time] {
-      return find_new_sensors(timer, processor, base_time);
+    new async_action([&timer,&processor,base_time,&find_new_sensors_label] {
+      return find_new_sensors(timer, processor, base_time, find_new_sensors_label);
     }));
-  timer.set_action("find_new_sensors", std::move(find_new_sensors_action));
-  timer.set_timer("find_new_sensors", 1.0);
+  timer.set_action(find_new_sensors_label, std::move(find_new_sensors_action));
+  timer.set_timer(find_new_sensors_label, 1.0);
 
   timer.wait_stopping();
 }
