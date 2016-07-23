@@ -42,7 +42,6 @@ either expressed or implied, of the FreeBSD Project.
 #include "queue-processor.hpp"
 #include "locking-container.hpp"
 
-
 // NOTE: It's assumed that:
 // - Type might not be copyable.
 // - Type *is* movable.
@@ -170,10 +169,10 @@ template <class Category, class Type>
 void poisson_queue <Category, Type> ::remove_action(const Category &category) {
   // NOTE: Removing a processor will result in the queued data being lost!
   // 1. Remove the category from consideration.
-  actions.set_timer(category, 0.0);
+  actions.erase_timer(category);
 
   // 2. Remove the category's action.
-  actions.set_action(category, nullptr);
+  actions.erase_action(category);
 
   // 3. Remove the catgory's processor.
   auto write_processors = processors.get_write();
@@ -198,8 +197,8 @@ bool poisson_queue <Category, Type> ::zombie_cleanup() {
       if (removed->second) {
         this->recover_lost_items(*removed->second);
       }
-      actions.set_timer(removed->first, 0.0);
-      actions.set_action(removed->first, nullptr);
+      actions.erase_timer(removed->first);
+      actions.erase_action(removed->first);
       write_processors->erase(removed);
     } else {
       ++current;

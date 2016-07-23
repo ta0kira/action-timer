@@ -37,9 +37,7 @@ either expressed or implied, of the FreeBSD Project.
 #include <string.h>
 
 #include "action-timer.hpp"
-
-// For linking of non-template locking-container symbols.
-#include "locking-container.inc"
+#include "helpers.hpp"
 
 namespace {
 
@@ -127,14 +125,12 @@ int main(int argc, char *argv[]) {
   std::string input;
 
   while (std::getline(std::cin, input)) {
-    char buffer[256];
-    memset(buffer, 0, sizeof buffer);
-    double lambda = 0.0;
-    if (sscanf(input.c_str(), "%lf:%256[\001-~]", &lambda, buffer) < 1) {
-      fprintf(stderr, "%s: Failed to parse \"%s\".\n", argv[0], input.c_str());
+    double      lambda;
+    std::string category;
+    if (!parse_lambda_and_label(input, lambda, category)) {
       continue;
     }
-    const std::string category(buffer);
+
     std::string text(category);
     // NOTE: The string might contain '\0' after expanding, which is fine, but
     // needs to be accounted for when printing.
@@ -142,16 +138,17 @@ int main(int argc, char *argv[]) {
       fprintf(stderr, "%s: Failed to parse \"%s\".\n", argv[0], input.c_str());
       continue;
     }
-    actions.set_timer(category, lambda);
-    if (category != "check_for_updates") {
-      action_timer <std::string> ::generic_action action;
-      if (lambda > 0) {
-        action.reset(new async_action([text] {
+    if (lambda > 0.0) {
+      actions.set_timer(category, lambda);
+      action_timer <std::string> ::generic_action action(
+        new async_action([text] {
           print_action(text);
           return true;
         }));
-      }
       actions.set_action(category, std::move(action));
+    } else {
+      actions.erase_action(category);
+      actions.erase_timer(category);
     }
   }
 }

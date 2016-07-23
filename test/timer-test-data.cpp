@@ -39,9 +39,6 @@ either expressed or implied, of the FreeBSD Project.
 
 #include "action-timer.hpp"
 
-// For linking of non-template locking-container symbols.
-#include "locking-container.inc"
-
 namespace {
 
 std::chrono::microseconds get_current_time() {

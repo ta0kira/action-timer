@@ -29,64 +29,15 @@ either expressed or implied, of the FreeBSD Project.
 
 // Author: Kevin P. Barry [ta0kira@gmail.com] [kevinbarry@google.com]
 
-#include "action-timer.hpp"
+#include "action.hpp"
 
-precise_timer::precise_timer(double cancel_granularity,
-                             double min_sleep_size) :
-  sleep_granularity(std::chrono::duration <double> (cancel_granularity)),
-  spinlock_limit(std::chrono::duration <double> (min_sleep_size)), base_time() {
-  this->mark();
-}
-
-void precise_timer::mark() {
-  base_time = std::chrono::duration_cast <std::chrono::duration <double>> (
-    std::chrono::high_resolution_clock::now().time_since_epoch());
-}
-
-void precise_timer::sleep_for(double time, std::function <bool()> cancel) {
-  const std::chrono::duration <double> target_duration(time);
-  base_time += target_duration;
-  bool canceled = false;
-
-  for (; !canceled; canceled = cancel && cancel()) {
-    const auto sleep_time = base_time -
-      std::chrono::duration_cast <std::chrono::duration <double>> (
-        std::chrono::high_resolution_clock::now().time_since_epoch());
-    if (sleep_time < std::chrono::duration <double> (0.0)) {
-      break;
-    }
-    if (sleep_time < spinlock_limit) {
-      this->spinlock_finish();
-      break;
-    } else if (sleep_time < sleep_granularity) {
-      std::this_thread::sleep_for(sleep_time - spinlock_limit);
-    } else {
-      std::this_thread::sleep_for(sleep_granularity);
-    }
-  }
-
-  if (canceled) {
-    this->mark();
-  }
-}
-
-void precise_timer::spinlock_finish() const {
-  while (true) {
-    const auto current_time = std::chrono::duration_cast <std::chrono::duration <double>> (
-      std::chrono::high_resolution_clock::now().time_since_epoch());
-    if (current_time >= base_time) {
-      break;
-    }
-  }
-}
-
-void async_action::start() {
+void async_action_base::start() {
   if (!thread) {
     thread.reset(new std::thread([this] { this->thread_loop(); }));
   }
 }
 
-bool async_action::trigger_action() {
+bool async_action_base::trigger_action() {
   std::unique_lock <std::mutex> local_lock(action_lock);
   if (!action_error) {
     action_waiting = true;
@@ -94,16 +45,22 @@ bool async_action::trigger_action() {
   action_wait.notify_all();
   return !destructor_called && !action_error;
 }
+  void terminate();
 
-async_action::~async_action() {
+async_action_base::~async_action_base() {
+  this->terminate();
+}
+
+void async_action_base::terminate() {
   destructor_called = true;
   action_wait.notify_all();
   if (thread) {
     thread->join();
+    thread.reset();
   }
 }
 
-void async_action::thread_loop() {
+void async_action_base::thread_loop() {
   while (!destructor_called) {
     {
       std::unique_lock <std::mutex> local_lock(action_lock);
@@ -113,8 +70,8 @@ void async_action::thread_loop() {
       }
       action_waiting = false;
     }
-    if (action && !destructor_called) {
-       if (!action()) {
+    if (!destructor_called) {
+       if (!this->action()) {
          action_error = true;
          break;
        }
@@ -122,17 +79,14 @@ void async_action::thread_loop() {
   }
 }
 
-bool sync_action::trigger_action() {
-  auto read_action = action.get_write();
+bool sync_action::action() {
+  auto read_action = action_callback.get_read();
   assert(read_action);
-  if (*read_action) {
-    return (*read_action)();
-  } else {
-    return false;
-  }
+  assert(*read_action);
+  return (*read_action)();
 }
 
 // NOTE: This waits for an ongoing action to complete.
 sync_action::~sync_action() {
-  auto write_action = action.get_write();
+  auto write_action = action_callback.get_write();
 }

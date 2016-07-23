@@ -33,8 +33,8 @@ either expressed or implied, of the FreeBSD Project.
 #define action_timer_hpp
 
 #include <atomic>
-#include <chrono>
 #include <condition_variable>
+#include <functional>
 #include <list>
 #include <memory>
 #include <map>
@@ -47,102 +47,9 @@ either expressed or implied, of the FreeBSD Project.
 
 #include "locking-container.hpp"
 
+#include "action.hpp"
 #include "category-tree.hpp"
-
-
-struct sleep_timer {
-  virtual void mark() = 0;
-  virtual void sleep_for(double time, std::function <bool()> cancel = nullptr) = 0;
-  virtual ~sleep_timer() = default;
-};
-
-// The antithesis of thread-safe!
-class precise_timer : public sleep_timer {
-public:
-  // cancel_granularity dictates how often the cancel callback passed to
-  // sleep_for will be called to check for cancelation. In general, you should
-  // not count on cancelation being ultra-fast; it's primarily intended for use
-  // with stopping threads in action_timer.
-  // min_sleep_size sets a lower limit on what sleep length will be handled with
-  // an actual sleep call. Below that limit, a spinlock will be used. Set this
-  // value to something other than zero if you need precise timing for sleeps
-  // that are shorter than your kernel's latency. (This is mostly a matter of
-  // experimentation.) Higher values will cause the timer to consume more CPU;
-  // therefore, set min_sleep_size to the lowest value possible. 0.0001 is a
-  // good place to start.
-  // min_sleep_size should be much smaller than cancel_granularity. If it isn't,
-  // however, sleeps will occur in chunks of cancel_granularity size until the
-  // remainder is smaller than the smaller of the two.
-  explicit precise_timer(double cancel_granularity = 0.01,
-                         double min_sleep_size = 0.0);
-
-  void mark() override;
-  void sleep_for(double time, std::function <bool()> cancel = nullptr) override;
-
-private:
-  void spinlock_finish() const;
-
-  const std::chrono::duration <double> sleep_granularity, spinlock_limit;
-  std::chrono::duration <double> base_time;
-};
-
-class abstract_action {
-public:
-  virtual void start() = 0;
-  virtual bool trigger_action() = 0;
-  virtual ~abstract_action() = default;
-};
-
-// Thread-safe, except for start.
-class async_action : public abstract_action {
-public:
-  // NOTE: A callback is used rather than a virtual function to avoid a race
-  // condition when destructing while trying to execute the action.
-
-  explicit async_action(std::function <bool()> new_action = nullptr) :
-  action(std::move(new_action)) {}
-
-  void start() override;
-  bool trigger_action() override;
-
-  // NOTE: This waits for the thread to reach an exit point, which could result
-  // in waiting for the current action to finish executing. The consequences
-  // should be no worse than the action being executed. For this reason, the
-  // action shouldn't block forever for an reason.
-  ~async_action() override;
-
-private:
-  void thread_loop();
-
-  std::atomic <bool> destructor_called, action_error;
-  std::unique_ptr <std::thread> thread;
-
-  bool action_waiting;
-  const std::function <bool()> action;
-
-  std::mutex               action_lock;
-  std::condition_variable  action_wait;
-};
-
-// Thread-safe.
-class sync_action : public abstract_action {
-public:
-  // NOTE: new_action must be thread-safe if this is used with an action_timer
-  // that has more than one thread!
-  explicit sync_action(std::function <bool()> new_action = nullptr) :
-  action(std::move(new_action)) {}
-
-  void start() override {}
-  bool trigger_action() override;
-
-  // NOTE: This waits for an ongoing action to complete.
-  ~sync_action() override;
-
-private:
-  typedef lc::locking_container <const std::function <bool()>, lc::r_lock> locked_action;
-
-  locked_action action;
-};
+#include "timer.hpp"
 
 template <class Category>
 class action_timer {
@@ -166,12 +73,16 @@ public:
 
   void set_scale(double scale);
 
-  void set_timer(const Category &category, double lambda);
+  bool set_timer(const Category &category, double lambda, bool overwrite = true);
+  void erase_timer(const Category &category);
+  bool timer_exists(const Category &category);
 
   // Ideally, async_action (or similar) should be used so that the amount of
   // time spent on the action by the timer thread is extremely small, with the
   // actual execution of the action happening in a dedicated thread.
-  void set_action(const Category &category, generic_action action);
+  bool set_action(const Category &category, generic_action action, bool overwrite = true);
+  void erase_action(const Category &category);
+  bool action_exists(const Category &category);
 
   // Start the timer threads. It's an error to call this when the threads are
   // already running.
@@ -252,37 +163,76 @@ void action_timer <Category> ::set_scale(double scale) {
 }
 
 template <class Category>
-void action_timer <Category> ::set_timer(const Category &category, double lambda) {
+bool action_timer <Category> ::set_timer(const Category &category, double lambda,
+                                         bool overwrite) {
   lc::lock_auth_base::auth_type auth(new lc::lock_auth <lc::w_lock>);
   auto category_write = locked_categories.get_write_auth(auth);
   assert(category_write);
-  if (lambda > 0) {
-    category_write->update_category(category, lambda);
-    category_write.clear();
-    // Manually perform the check that get_write_auth would perform if locking
-    // state_lock was done by locking-container.
-    assert(auth->guess_write_allowed(true, true));
-    std::unique_lock <std::mutex> local_lock(state_lock);
-    state_wait.notify_all();
-  } else {
-    category_write->erase_category(category);
+  assert(lambda > 0);
+  if (!overwrite && category_write->category_exists(category)) {
+    return false;
   }
+  category_write->update_category(category, lambda);
+  category_write.clear();
+  // Manually perform the check that get_write_auth would perform if locking
+  // state_lock was done by locking-container.
+  assert(auth->guess_write_allowed(true, true));
+  std::unique_lock <std::mutex> local_lock(state_lock);
+  state_wait.notify_all();
+  return true;
 }
 
 template <class Category>
-void action_timer <Category> ::set_action(const Category &category, generic_action action) {
+void action_timer <Category> ::erase_timer(const Category &category) {
+  lc::lock_auth_base::auth_type auth(new lc::lock_auth <lc::w_lock>);
+  auto category_write = locked_categories.get_write_auth(auth);
+  assert(category_write);
+  category_write->erase_category(category);
+}
+
+template <class Category>
+bool action_timer <Category> ::timer_exists(const Category &category) {
+  auto category_read = locked_categories.get_read();
+  assert(category_read);
+  return category_read->category_exists(category);
+}
+
+template <class Category>
+bool action_timer <Category> ::set_action(const Category &category,
+                                          generic_action action, bool overwrite) {
   if (action) {
     action->start();
   }
   auto action_write = locked_actions.get_write();
   assert(action_write);
-  if (action) {
+  assert(action);
+  if (!overwrite && action_write->find(category) != action_write->end()) {
+    return false;
+  }
+  // NOTE: swap is used here so that destruction is called after
+  // locked_actions is unlocked, in case the destructor is non-trivial.
+  (*action_write)[category].swap(action);
+  return true;
+}
+
+template <class Category>
+void action_timer <Category> ::erase_action(const Category &category) {
+  auto action_write = locked_actions.get_write();
+  auto existing = action_write->find(category);
+  if (existing != action_write->end()) {
+    generic_action discard;
     // NOTE: swap is used here so that destruction is called after
     // locked_actions is unlocked, in case the destructor is non-trivial.
-    (*action_write)[category].swap(action);
-  } else {
-    action_write->erase(category);
+    existing->second.swap(discard);
+    action_write->erase(existing);
   }
+}
+
+template <class Category>
+bool action_timer <Category> ::action_exists(const Category &category) {
+  auto action_read = locked_actions.get_read();
+  assert(action_read);
+  return action_read->find(category) != action_read->end();
 }
 
 template <class Category>
@@ -414,8 +364,8 @@ void action_timer <Category> ::thread_loop(unsigned int thread_number) {
     if (remove) {
       action_read.clear();
       assert(!action_read);
-      this->set_timer(category, 0.0);
-      this->set_action(category, nullptr);
+      this->erase_timer(category);
+      this->erase_action(category);
     }
   }
 }

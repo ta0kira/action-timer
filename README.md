@@ -233,7 +233,7 @@ int main() {
 
 ```shell
 $ c++ -std=c++11 -O2 -g -Iinclude -Ilocking-container/include \
-    example/action_timer_demo1.cpp src/action-timer.cpp -o action_timer_demo1 -pthread
+    example/action_timer_demo1.cpp src/{action,timer}.cpp -o action_timer_demo1 -pthread
 $ ./action_timer_demo1
 ```
 
@@ -328,7 +328,7 @@ int main() {
 
 ```shell
 $ c++ -std=c++11 -O2 -g -Iinclude -Ilocking-container/include \
-    example/poisson_queue_demo1.cpp src/action-timer.cpp -o poisson_queue_demo1 -pthread
+    example/poisson_queue_demo1.cpp src/{action,timer}.cpp -o poisson_queue_demo1 -pthread
 $ ./poisson_queue_demo1
 ```
 

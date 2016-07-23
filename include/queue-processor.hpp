@@ -39,14 +39,13 @@ either expressed or implied, of the FreeBSD Project.
 #include <thread>
 #include <utility>
 
-
 template <class Type>
 class blocking_strict_queue {
 public:
   using queue_type = std::list <Type>;
 
   blocking_strict_queue(unsigned int new_capacity) :
-  terminated(false), in_progress(0), capacity(new_capacity) {}
+  terminated(), in_progress(0), capacity(new_capacity) {}
 
   void terminate();
   bool is_terminated() const;
@@ -81,7 +80,7 @@ public:
   using locked_queue = lc::locking_container_base <queue_type>;
 
   queue_processor(std::function <bool(Type&)> new_action, unsigned int new_capacity = 1) :
-  terminated(false), action(std::move(new_action)), queue(new_capacity) {}
+  terminated(), action(std::move(new_action)), queue(new_capacity) {}
 
   void start();
   void terminate();

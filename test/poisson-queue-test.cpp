@@ -35,10 +35,8 @@ either expressed or implied, of the FreeBSD Project.
 
 #include <string.h>
 
+#include "helpers.hpp"
 #include "poisson-queue.hpp"
-
-// For linking of non-template locking-container symbols.
-#include "locking-container.inc"
 
 int main(int argc, char *argv[]) {
   // unique_ptr isn't necessary, but it helps test move correctness.
@@ -71,14 +69,11 @@ int main(int argc, char *argv[]) {
   std::string input;
 
   while (std::getline(std::cin, input)) {
-    char buffer[256];
-    memset(buffer, 0, sizeof buffer);
-    double lambda = 0.0;
-    if (sscanf(input.c_str(), "%lf:%256s", &lambda, buffer) != 2) {
-      fprintf(stderr, "%s: Failed to parse \"%s\".\n", argv[0], input.c_str());
+    double      lambda;
+    std::string category;
+    if (!parse_lambda_and_label(input, lambda, category)) {
       continue;
     }
-    const std::string category(buffer);
 
     if (lambda <= 0.0) {
       queue.remove_action(category);

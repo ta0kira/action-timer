@@ -90,7 +90,7 @@ public:
   using optional_node = std::unique_ptr <category_node>;
 
   category_node(const Category &new_category, Size new_size) :
-  category(new_category), size(new_size), height(1) {}
+  category(new_category), size(new_size), height(1), total_size() {}
 
   Size get_total_size() const {
     return total_size;
