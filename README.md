@@ -159,6 +159,10 @@ specify a _&lambda;_ parameter that indicates how often, on average, the action
    the usage remains somewhat balanced without the processes coordinating, or
    knowing at what rate any of the others are executing.
 1. This is an approximate model for many things related to queueing.
+1. If the process is to poll a sensor, and the sensor's input is periodic (e.g.,
+   a sine wave), sampling at regular intervals can mask or distort such a trend,
+   whereas iregular sampling provides more representative data. (For example, if
+   you sample `sin(t)` every _&pi;_ seconds, you'll see constant input.)
 1. _Most importantly_, a single timer can be used to manage an unlimited number
    of processes _without_ spawning a new thread to time each of them. This is
    due to the fact that you can combine a [categorical distribution][categorical]
