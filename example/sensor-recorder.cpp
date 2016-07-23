@@ -111,85 +111,109 @@ private:
   sensor_data_processor           &processor;
 };
 
-bool find_new_sensors(action_timer <std::string> &timer,
-                      sensor_data_processor &processor,
-                      std::chrono::microseconds base_time,
-                      const std::string &my_name) {
-  if (processor.is_terminated()) {
-    std::cerr << "Processor is terminated => stopping timer." << std::endl;
-    return false;
+class sensor_monitor_and_processor {
+public:
+  sensor_monitor_and_processor(const std::string &name) :
+  base_time(std::chrono::duration_cast <std::chrono::microseconds> (
+    std::chrono::high_resolution_clock::now().time_since_epoch())),
+  my_name(name), processor([this](optional_sensor_data &data) {
+      return process_sensor_data(timer, data);
+    }) {}
+
+  void start() {
+    // NOTE: One or both of these should catch a repeated call to start.
+    timer.start();
+    processor.start();
+
+    action_timer <std::string> ::generic_action new_action(
+      new async_action([this] { return this->check_sensors(); }));
+    timer.set_action(my_name, std::move(new_action));
+    timer.set_timer(my_name, 1.0);
   }
 
-  std::string input;
-  if (!std::getline(std::cin, input)) {
-    std::cerr << "Unable to check for new sensors => stopping timer." << std::endl;
-    timer.async_stop();
-    return false;
+  void wait_stopping() {
+    timer.wait_stopping();
   }
 
-  double      lambda;
-  std::string category;
-  if (!parse_lambda_and_label(input, lambda, category)) {
-    // Parsing error, but not fatal.
-    return true;
+  ~sensor_monitor_and_processor() {
+    // Call terminate before ~queue_processor does so that the thread is stopped
+    // before the members of this instance destruct.
+    processor.terminate();
+    // Ditto, but for ~action_timer.
+    timer.stop();
   }
 
-  if (category == my_name) {
+private:
+  bool check_sensors() {
+    if (processor.is_terminated()) {
+      std::cerr << "Processor is terminated => stopping timer." << std::endl;
+      timer.async_stop();
+      return false;
+    }
+
+    std::string input;
+    // Note that this blocks the thread while waiting for a read; therefore, the
+    // check above won't happen again until there is new input.
+    if (!std::getline(std::cin, input)) {
+      std::cerr << "Unable to check for new sensors => stopping timer." << std::endl;
+      timer.async_stop();
+      return false;
+    }
+
+    double      lambda;
+    std::string category;
+    if (!parse_lambda_and_label(input, lambda, category)) {
+      // Parsing error, but not fatal.
+      return true;
+    }
+
+    if (category == my_name) {
+      if (lambda <= 0.0) {
+        std::cerr << "Refusing to remove " << category << "." << std::endl;
+      } else {
+        std::cerr << "Changing timing for " << category << "." << std::endl;
+        timer.set_timer(category, lambda);
+      }
+      return true;
+    }
+
     if (lambda <= 0.0) {
-      std::cerr << "Refusing to remove " << category << "." << std::endl;
-    } else {
-      std::cerr << "Changing timing for " << category << "." << std::endl;
-      timer.set_timer(category, lambda);
+      if (timer.action_exists(category)) {
+        std::cerr << "Stopping sensor " << category << "." << std::endl;
+        timer.erase_action(category);
+        timer.erase_timer(category);
+      }
+      return true;
     }
-    return true;
-  }
 
-  if (lambda <= 0.0) {
     if (timer.action_exists(category)) {
-      std::cerr << "Stopping sensor " << category << "." << std::endl;
-      timer.erase_action(category);
-      timer.erase_timer(category);
+      std::cerr << "Changing timing for sensor " << category << "." << std::endl;
+      // NOTE: The sensor could die between checking and updating, but that
+      // shouldn't matter, since we check via action_exists, i.e., if it comes up
+      // again then it will be restarted.
+      timer.set_timer(category, lambda);
+      return true;
     }
-    return true;
-  }
 
-  if (timer.action_exists(category)) {
-    std::cerr << "Changing timing for sensor " << category << "." << std::endl;
-    // NOTE: The sensor could die between checking and updating, but that
-    // shouldn't matter, since we check via action_exists, i.e., if it comes up
-    // again then it will be restarted.
+    std::cerr << "Starting sensor " << category << "." << std::endl;
+    action_timer <std::string> ::generic_action sensor(new sensor_reader(category, processor, base_time));
     timer.set_timer(category, lambda);
+    timer.set_action(category, std::move(sensor));
     return true;
   }
 
-  std::cerr << "Starting sensor " << category << "." << std::endl;
-  action_timer <std::string> ::generic_action sensor(new sensor_reader(category, processor, base_time));
-  timer.set_timer(category, lambda);
-  timer.set_action(category, std::move(sensor));
-  return true;
-}
+  const std::chrono::microseconds base_time;
+  const std::string               my_name;
+
+  action_timer <std::string> timer;
+  sensor_data_processor      processor;
+};
 
 } // namespace
 
 int main(int argc, char *argv[]) {
-  action_timer <std::string> timer;
-  timer.start();
 
-  const auto base_time = std::chrono::duration_cast <std::chrono::microseconds> (
-    std::chrono::high_resolution_clock::now().time_since_epoch());
-
-  sensor_data_processor processor([&timer](optional_sensor_data &data) {
-    return process_sensor_data(timer, data);
-  });
-  processor.start();
-
-  const std::string find_new_sensors_label("find_new_sensors");
-  action_timer <std::string> ::generic_action find_new_sensors_action(
-    new async_action([&timer,&processor,base_time,&find_new_sensors_label] {
-      return find_new_sensors(timer, processor, base_time, find_new_sensors_label);
-    }));
-  timer.set_action(find_new_sensors_label, std::move(find_new_sensors_action));
-  timer.set_timer(find_new_sensors_label, 1.0);
-
-  timer.wait_stopping();
+  sensor_monitor_and_processor sensors("sensor_monitor");
+  sensors.start();
+  sensors.wait_stopping();
 }

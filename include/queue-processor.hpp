@@ -93,7 +93,7 @@ public:
   ~queue_processor_base();
 
 private:
-  virtual bool action(Type &item) = 0;
+  virtual bool process(Type &item) = 0;
 
   void processor_thread();
 
@@ -106,16 +106,16 @@ private:
 template <class Type>
 class queue_processor : public queue_processor_base <Type> {
 public:
-  queue_processor(std::function <bool(Type&)> new_action, unsigned int new_capacity = 1) :
-  queue_processor_base <Type> (new_capacity), action_callback(std::move(new_action)) {}
+  queue_processor(std::function <bool(Type&)> new_process, unsigned int new_capacity = 1) :
+  queue_processor_base <Type> (new_capacity), process_callback(std::move(new_process)) {}
 
 private:
-  bool action(Type &item) override {
-    assert(action_callback);
-    return action_callback(item);
+  bool process(Type &item) override {
+    assert(process_callback);
+    return process_callback(item);
   }
 
-  const std::function <bool(Type&)> action_callback;
+  const std::function <bool(Type&)> process_callback;
 };
 
 template <class Type>
@@ -280,7 +280,7 @@ void queue_processor_base <Type> ::processor_thread() {
     if (!queue.dequeue(removed)) {
       break;
     } else {
-      if (!this->action(removed)) {
+      if (!this->process(removed)) {
         queue.requeue_item(std::move(removed));
         break;
       } else {
@@ -288,7 +288,7 @@ void queue_processor_base <Type> ::processor_thread() {
       }
     }
   }
-  // Don't accept anything new. This is necessary if action returns false and
+  // Don't accept anything new. This is necessary if process returns false and
   // turns this processor into a zombie.
   this->terminate();
 }
