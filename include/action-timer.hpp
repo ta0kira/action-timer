@@ -182,9 +182,8 @@ bool action_timer <Category> ::set_timer(const Category &category, double lambda
   }
   category_write->update_category(category, lambda);
   category_write.clear();
-  // Manually perform the check that get_write_auth would perform if locking
-  // state_lock was done by locking-container.
-  assert(auth->guess_write_allowed(true, true));
+  // Make sure that no thread gets stuck between locking state_lock and waiting
+  // for state_wait.
   std::unique_lock <std::mutex> local_lock(state_lock);
   state_wait.notify_all();
   return true;
@@ -208,12 +207,10 @@ bool action_timer <Category> ::timer_exists(const Category &category) {
 template <class Category>
 bool action_timer <Category> ::set_action(const Category &category,
                                           generic_action action, bool overwrite) {
-  if (action) {
-    action->start();
-  }
+  assert(action);
+  action->start();
   auto action_write = locked_actions.get_write();
   assert(action_write);
-  assert(action);
   if (!overwrite && action_write->find(category) != action_write->end()) {
     return false;
   }
@@ -233,6 +230,8 @@ void action_timer <Category> ::erase_action(const Category &category) {
     // locked_actions is unlocked, in case the destructor is non-trivial.
     existing->second.swap(discard);
     action_write->erase(existing);
+    // Forces unlocking before discard is destructed.
+    action_write.clear();
   }
 }
 
@@ -245,12 +244,10 @@ bool action_timer <Category> ::action_exists(const Category &category) {
 
 template <class Category>
 void action_timer <Category> ::start() {
-  assert(this->is_stopped());
+  assert(this->is_stopped() && threads.empty());
   stopped = stop_called = false;
-  if (threads.empty()) {
-    for (unsigned int i = 0; i < thread_count; ++i) {
-      threads.emplace_back(new std::thread([this,i] { this->thread_loop(i); }));
-    }
+  for (unsigned int i = 0; i < thread_count; ++i) {
+    threads.emplace_back(new std::thread([this,i] { this->thread_loop(i); }));
   }
 }
 
@@ -275,11 +272,11 @@ void action_timer <Category> ::wait_stopped() {
 
 template <class Category>
 void action_timer <Category> ::async_stop() {
-  {
-    std::unique_lock <std::mutex> local_lock(state_lock);
-    stop_called = true;
-    state_wait.notify_all();
-  }
+  // Make sure that no thread gets stuck between locking state_lock and waiting
+  // for state_wait.
+  std::unique_lock <std::mutex> local_lock(state_lock);
+  stop_called = true;
+  state_wait.notify_all();
 }
 
 template <class Category>
@@ -352,8 +349,8 @@ void action_timer <Category> ::thread_loop(unsigned int thread_number) {
     }
 
     // NOTE: Need to copy category to avoid a race condition!
-    const Category   category = category_read->locate(category_uniform * category_read->get_total_size());
-    const double time     = time_exponential / category_read->get_total_size() * (double) thread_count;
+    const Category category = category_read->locate(category_uniform * category_read->get_total_size());
+    const double   time     = time_exponential / category_read->get_total_size() * (double) thread_count;
     category_read.clear();
     assert(!category_read);
 
@@ -366,7 +363,8 @@ void action_timer <Category> ::thread_loop(unsigned int thread_number) {
     assert(action_read);
     auto existing = action_read->find(category);
     bool remove = false;
-    if (existing != action_read->end() && existing->second) {
+    if (existing != action_read->end()) {
+      assert(existing->second);
       remove = !existing->second->trigger_action();
     }
     if (remove) {
