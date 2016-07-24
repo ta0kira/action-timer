@@ -70,9 +70,10 @@ using camera_data_processor = queue_processor_base <optional_camera_data>;
 class camera_reader {
 public:
   camera_reader(int new_number, const std::string &new_window,
-                int new_width, int new_height) :
-  recording(false), terminated(false), number(new_number),
-  width(new_width), height(new_height), window(new_window),
+                int new_width, int new_height,
+                const std::string &output_filename = "") :
+  recording(false), terminated(false), filename(output_filename),
+  number(new_number), width(new_width), height(new_height), window(new_window),
   blank_image(cv::Mat::zeros(height, width, CV_8UC3)),
   base_time(std::chrono::duration_cast <std::chrono::microseconds> (
     std::chrono::high_resolution_clock::now().time_since_epoch())) {}
@@ -82,6 +83,9 @@ public:
     cv::namedWindow(window);
     this->clear_window();
     this->open_camera();
+    if (!filename.empty()) {
+      writer.open(filename, CV_FOURCC('M','J','P','G'), 30.0, cv::Size(width, height));
+    }
     thread.reset(new std::thread([this] { this->capture_thread(); }));
   }
 
@@ -254,6 +258,9 @@ private:
                     text_thickness);
         cv::imshow(window, with_label);
         cv::waitKey(1);
+        if (writer.isOpened()) {
+          writer.write(with_label);
+        }
       }
     }
     this->close_camera();
@@ -267,12 +274,14 @@ private:
   std::atomic <bool>      recording, terminated;
 
   cv::VideoCapture capture;
+  cv::VideoWriter  writer;
   lc::locking_container <optional_camera_data, lc::rw_lock> last_frame;
 
-  const int                        number, width, height;
-  const std::string                window;
-  const cv::Mat                    blank_image;
-  const std::chrono::microseconds  base_time;
+  const std::string               filename;
+  const int                       number, width, height;
+  const std::string               window;
+  const cv::Mat                   blank_image;
+  const std::chrono::microseconds base_time;
 };
 
 class motion_detector : public queue_processor_base <optional_camera_data> {
@@ -364,8 +373,8 @@ int main(int argc, char *argv[]) {
     std::signal(signal, &exit);
   }
 
-  if (argc != 3 && argc != 5) {
-    fprintf(stderr, "%s [lambda] [camera num] (width) (height)\n", argv[0]);
+  if (argc != 5 && argc != 6) {
+    fprintf(stderr, "%s [lambda] [camera num] [width] [height] (output .avi)\n", argv[0]);
     return 1;
   }
 
@@ -390,25 +399,25 @@ int main(int argc, char *argv[]) {
     return 1;
   }
 
-  if (argc == 5) {
-    parse.str(argv[3]);
-    parse.clear();
-    if (!(parse >> width) || parse >> extra) {
-      fprintf(stderr, "%s: Failed to parse \"%s\".\n", argv[0], argv[3]);
-      return 1;
-    }
-    parse.str(argv[4]);
-    parse.clear();
-    if (!(parse >> height) || parse >> extra) {
-      fprintf(stderr, "%s: Failed to parse \"%s\".\n", argv[0], argv[4]);
-      return 1;
-    }
+  parse.str(argv[3]);
+  parse.clear();
+  if (!(parse >> width) || parse >> extra) {
+    fprintf(stderr, "%s: Failed to parse \"%s\".\n", argv[0], argv[3]);
+    return 1;
+  }
+
+  parse.str(argv[4]);
+  parse.clear();
+  if (!(parse >> height) || parse >> extra) {
+    fprintf(stderr, "%s: Failed to parse \"%s\".\n", argv[0], argv[4]);
+    return 1;
   }
 
   action_timer <int> timer;
   timer.start();
 
-  camera_reader camera(number, "camera_monitor", width, height);
+  camera_reader camera(number, "camera_monitor", width, height,
+                       argc == 6 ? argv[5] : "");
   camera.start();
 
   motion_detector detector(camera);
