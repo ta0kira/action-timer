@@ -87,9 +87,15 @@ public:
   optional_camera_data get_frame() {
     {
       std::unique_lock <std::mutex> local_lock(record_lock);
+      if (terminated) {
+        std::cerr << "Camera " << number << " is stopped." << std::endl;
+        return nullptr;
+      }
       if (!recording) {
       std::cerr << "Getting static frame from " << number << "." << std::endl;
         if (!this->capture_frame(true)) {
+          local_lock.unlock();
+          this->terminate();
           return nullptr;
         }
       } else {
@@ -122,17 +128,19 @@ public:
   }
 
   ~camera_reader() {
-    {
-      std::unique_lock <std::mutex> local_lock(record_lock);
-      terminated = true;
-      record_wait.notify_all();
-    }
+    this->terminate();
     if (thread) {
       thread->join();
     }
   }
 
 private:
+  void terminate() {
+    std::unique_lock <std::mutex> local_lock(record_lock);
+    terminated = true;
+    record_wait.notify_all();
+  }
+
   void clear_window() {
     // Clear the window.
     if (!blank_image.empty()) {
