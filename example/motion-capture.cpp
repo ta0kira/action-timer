@@ -166,10 +166,27 @@ private:
       return false;
     }
     cv::Mat frame;
-    if (!capture.read(frame)) {
-      std::cerr << "Failed to get frame from " << number << "." << std::endl;
-      return false;
+
+    const auto time_start = std::chrono::duration_cast <std::chrono::microseconds> (
+    std::chrono::high_resolution_clock::now().time_since_epoch());
+
+    // This loop attempts to escape frame buffering. If, for example, the camera
+    // buffers 4 frames, it would otherwise take 4 calls to get to the frame for
+    // the current time. This is still cheaper than leaving the camera running
+    // the entire time.
+    while (true) {
+      if (!capture.read(frame)) {
+        std::cerr << "Failed to get frame from " << number << "." << std::endl;
+        return false;
+      }
+      const auto time_now = std::chrono::duration_cast <std::chrono::microseconds> (
+      std::chrono::high_resolution_clock::now().time_since_epoch());
+      // Assumes 60fps.
+      if (!is_static || (time_now - time_start).count() / 1000000.0 > 1.0 / 30.0) {
+        break;
+      }
     }
+
 
     const auto time =  std::chrono::duration_cast <std::chrono::microseconds> (
       std::chrono::high_resolution_clock::now().time_since_epoch()) - base_time;
