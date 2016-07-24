@@ -81,6 +81,7 @@ public:
     assert(!thread);
     cv::namedWindow(window);
     this->clear_window();
+    this->open_camera();
     thread.reset(new std::thread([this] { this->capture_thread(); }));
   }
 
@@ -113,7 +114,6 @@ public:
     assert(thread);
     std::unique_lock <std::mutex> local_lock(record_lock);
     recording = true;
-    this->open_camera();
     record_wait.notify_all();
   }
 
@@ -122,9 +122,7 @@ public:
     assert(thread);
     std::unique_lock <std::mutex> local_lock(record_lock);
     recording = false;
-    this->close_camera();
     record_wait.notify_all();
-    this->clear_window();
   }
 
   ~camera_reader() {
@@ -163,11 +161,6 @@ private:
   }
 
   bool capture_frame(bool is_static) {
-    // NOTE: Assumes that record_lock is locked!
-    if (is_static) {
-      this->open_camera();
-    }
-
     if (!capture.isOpened()) {
       std::cerr << "Camera " << number << " not present." << std::endl;
       return false;
@@ -176,12 +169,6 @@ private:
     if (!capture.read(frame)) {
       std::cerr << "Failed to get frame from " << number << "." << std::endl;
       return false;
-    }
-
-    // This makes sure that frames aren't buffered when we aren't recording;
-    // otherwise, there will be a lag in frame processing.
-    if (is_static) {
-      this->close_camera();
     }
 
     const auto time =  std::chrono::duration_cast <std::chrono::microseconds> (
@@ -217,6 +204,7 @@ private:
       {
         std::unique_lock <std::mutex> local_lock(record_lock);
         if (!recording) {
+          this->clear_window();
           record_wait.wait(local_lock);
           if (terminated) {
             break;
@@ -251,6 +239,7 @@ private:
         cv::waitKey(1);
       }
     }
+    this->close_camera();
     terminated = true;
   }
 
