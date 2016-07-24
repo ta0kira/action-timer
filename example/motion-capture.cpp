@@ -235,8 +235,18 @@ private:
         std::ostringstream formatted;
         formatted.precision(1);
         formatted << std::fixed << **frame_read;
-        cv::putText(with_label, formatted.str(), cv::Point(10, height - 10),
-                    cv::FONT_HERSHEY_DUPLEX, 1.0, cv::Scalar(255, 255, 255), 1.0);
+        int baseline = 0;
+        const cv::Point corner = cv::Point(10, height - 10);
+        const double font_size = 1.0, text_thickness = 1.0;
+        const cv::Point size = cv::Point(
+          cv::getTextSize(formatted.str(), cv::FONT_HERSHEY_DUPLEX,
+                          font_size, text_thickness, &baseline));
+        const cv::Point corner2 = cv::Point(corner.x + size.x, corner.y - size.y);
+        cv::rectangle(with_label, corner, corner2, cv::Scalar(31, 31, 31), CV_FILLED);
+        cv::rectangle(with_label, corner, corner2, cv::Scalar(0, 0, 0), 2);
+        cv::putText(with_label, formatted.str(), corner,
+                    cv::FONT_HERSHEY_DUPLEX, font_size, cv::Scalar(255, 255, 255),
+                    text_thickness);
         cv::imshow(window, with_label);
         cv::waitKey(1);
       }
