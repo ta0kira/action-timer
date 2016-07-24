@@ -69,133 +69,80 @@ using camera_data_processor = queue_processor_base <optional_camera_data>;
 
 class process_camera_data : public queue_processor_base <optional_camera_data> {
 public:
-  process_camera_data(const std::string &new_window) :
-  queue_processor_base <optional_camera_data> (100), last_frame_changed(false),
-  window(new_window) {}
+  process_camera_data(abstract_scaled_timer &new_timer, const std::string &new_window) :
+  last_frame_changed(false), window(new_window), timer(new_timer) {}
 
 private:
   bool process(optional_camera_data &data) override {
     assert(data);
     if (!data->frame.empty()) {
-      cv::Mat frame = data->frame, frame_temp, new_base;
-      // Rudimentary motion detection.
-      // 1. To grayscale, normalize, and blur.
-      cv::cvtColor(frame, frame_temp, CV_BGR2GRAY);
-      frame = frame_temp;
-      cv::normalize(frame, frame_temp, 0, 255, cv::NORM_MINMAX);
-      frame = frame_temp;
-      cv::blur(frame, frame_temp, cv::Size(10, 10));
-      new_base = frame_temp.clone();
+      cv::Mat frame          = this->preprocess(data->frame);
+      const cv::Mat new_base = frame.clone();
       if (!last_frame.empty()) {
-        // 2. Get change since last frame.
-        frame = frame_temp - last_frame;
-        // 3. Edge detection, and another blur.
-        cv::Canny(frame, frame_temp, 1.0, 75.0);
-        frame = frame_temp;
-        cv::blur(frame, frame_temp, cv::Size(10, 10));
-        frame = frame_temp;
-        // 4. Normalize, then back to color.
-        cv::normalize(frame, frame_temp, 0, 255, cv::NORM_MINMAX);
-        cv::cvtColor(frame_temp, frame, CV_GRAY2BGR);
-        // 5. Check overall change.
-        if (cv::norm(frame) / (frame.rows * frame.cols) > 0.000001) {
-          if (!last_frame_changed) {
-            std::cerr << "Change detected in " << *data << "." << std::endl;
-            last_frame_changed = true;
-          }
-          // Make it red, then overlay it on the original frame.
-          frame.reshape(1, frame.rows*frame.cols).col(0).setTo(cv::Scalar(0.0));
-          frame.reshape(1, frame.rows*frame.cols).col(1).setTo(cv::Scalar(0.0));
-          cv::scaleAdd(frame, 0.25, data->frame, frame_temp);
-          cv::imshow(window, frame_temp);
-        } else {
-          // Just show the differences.
-          if (last_frame_changed) {
-            std::cerr << "No change detected in " << *data << "." << std::endl;
-            last_frame_changed = false;
-          }
-          cv::imshow(window, frame);
-        }
-        cv::waitKey(1);
+        frame = this->diff_since_last(frame);
+        this->check_and_display(frame, data);
       }
       last_frame = new_base;
     }
     return true;
   }
 
-  bool              last_frame_changed;
-  const std::string window;
-  cv::Mat           last_frame;
-};
-
-class frame_dumper {
-public:
-  frame_dumper(cv::VideoCapture new_capture) :
-  terminated(false), capture(std::move(new_capture)) {}
-
-  void start() {
-    assert(!thread);
-    thread.reset(new std::thread([this] { this->capture_thread(); }));
+  cv::Mat preprocess(const cv::Mat &orig_frame) const {
+    cv::Mat frame = orig_frame, frame_temp;
+    cv::cvtColor(frame, frame_temp, CV_BGR2GRAY);
+    frame = frame_temp;
+    cv::normalize(frame, frame_temp, 0, 255, cv::NORM_MINMAX);
+    frame = frame_temp;
+    cv::blur(frame, frame_temp, cv::Size(10, 10));
+    return frame_temp;
   }
 
-  bool get_frame(cv::Mat &frame) {
-    if (terminated) {
-      return false;
+  cv::Mat diff_since_last(const cv::Mat &orig_frame) const {
+    cv::Mat frame = orig_frame - last_frame, frame_temp;
+    cv::Canny(frame, frame_temp, 1.0, 75.0);
+    frame = frame_temp;
+    cv::blur(frame, frame_temp, cv::Size(10, 10));
+    frame = frame_temp;
+    cv::normalize(frame, frame_temp, 0, 255, cv::NORM_MINMAX);
+    cv::cvtColor(frame_temp, frame, CV_GRAY2BGR);
+    return frame;
+  }
+
+  void check_and_display(const cv::Mat &orig_frame, const optional_camera_data &data) {
+    cv::Mat frame = orig_frame.clone(), frame_temp;
+    const bool this_frame_changed = cv::norm(frame) / (frame.rows * frame.cols) > 0.000001;
+    if (this_frame_changed) {
+      last_changed_time = data->time;
+    }
+    // Keep showing frames for 10s after the last detected motion.
+    if (this_frame_changed || (data->time - last_changed_time).count() / 1000000.0 < 10.0) {
+      if (this_frame_changed && !last_frame_changed) {
+        std::cerr << "Change detected in " << *data << "." << std::endl;
+        last_frame_changed = true;
+        timer.set_scale(10.0);
+      }
+      // Make it red, then overlay it on the original frame.
+      frame.reshape(1, frame.rows*frame.cols).col(0).setTo(cv::Scalar(0.0));
+      frame.reshape(1, frame.rows*frame.cols).col(1).setTo(cv::Scalar(0.0));
+      cv::scaleAdd(frame, 0.25, data->frame, frame_temp);
+      cv::imshow(window, frame_temp);
     } else {
-      auto frame_read = current_frame.get_read();
-      assert(frame_read);
-      frame = *frame_read;
-      return true;
+      // Just show the differences.
+      if (!this_frame_changed && last_frame_changed) {
+        std::cerr << "No change detected in " << *data << "." << std::endl;
+        last_frame_changed = false;
+        timer.set_scale(1.0);
+      }
+      cv::imshow(window, frame);
     }
+    cv::waitKey(1);
   }
 
-  ~frame_dumper() {
-    terminated = true;
-    if (thread) {
-      thread->join();
-    }
-  }
-
-private:
-  void capture_thread() {
-    while (!terminated) {
-      if (!capture.isOpened()) {
-        std::cerr << "Camera not present." << std::endl;
-        break;
-      }
-      cv::Mat frame;
-      if (!capture.read(frame)) {
-        std::cerr << "Failed to get frame." << std::endl;
-        break;
-      }
-
-      auto frame_write = current_frame.get_write();
-      assert(frame_write);
-
-      // Unfortunately, OpenCV seems to not have a portable way to detect if the
-      // camera has been unplugged => as a heuristic, consider it crashed if we
-      // get two identical frames in a row. (Probably not perfect.)
-      if (!frame_write->empty() && frame_write->size() == frame.size()) {
-        const auto diff = cv::sum(*frame_write - frame);
-        if (std::accumulate(diff.val, diff.val + 4, 0.0) == 0.0) {
-          std::cerr << "Camera seems to have crashed." << std::endl;
-          break;
-        }
-      }
-      *frame_write = frame;
-    }
-    terminated = true;
-  }
-
-  frame_dumper(const frame_dumper&) = delete;
-  frame_dumper(frame_dumper&&) = delete;
-  frame_dumper &operator = (const frame_dumper&) = delete;
-  frame_dumper &operator = (frame_dumper&&) = delete;
-
-  std::unique_ptr <std::thread>                thread;
-  std::atomic <bool>                           terminated;
-  cv::VideoCapture                             capture;
-  lc::locking_container <cv::Mat, lc::rw_lock> current_frame;
+  bool                       last_frame_changed;
+  std::chrono::microseconds  last_changed_time;
+  const std::string          window;
+  cv::Mat                    last_frame;
+  abstract_scaled_timer     &timer;
 };
 
 class camera_reader : public async_action_base {
@@ -203,13 +150,8 @@ public:
   camera_reader(cv::VideoCapture new_capture, int new_number,
                 camera_data_processor &new_processor,
                 std::chrono::microseconds time) :
-  frames(std::move(new_capture)), base_time(time), number(new_number),
+  capture(std::move(new_capture)), base_time(time), number(new_number),
   processor(new_processor) {}
-
-  void start() override {
-    frames.start();
-    async_action_base::start();
-  }
 
   ~camera_reader() override {
     // Call terminate before ~async_action_base does so that the thread is
@@ -219,11 +161,27 @@ public:
 
 private:
   bool action() override {
-    cv::Mat frame;
-    if (!frames.get_frame(frame)) {
-      std::cerr << "Frame dumper for " << number << " is terminated." << std::endl;
+    if (!capture.isOpened()) {
+      std::cerr << "Camera " << number << " not present." << std::endl;
       return false;
     }
+    cv::Mat frame;
+    if (!capture.read(frame)) {
+      std::cerr << "Failed to get frame from " << number << "." << std::endl;
+      return false;
+    }
+
+    // Unfortunately, OpenCV seems to not have a portable way to detect if the
+    // camera has been unplugged => as a heuristic, consider it crashed if we
+    // get two identical frames in a row. (Probably not perfect.)
+    if (!last_frame.empty() && last_frame.size() == frame.size()) {
+      const auto diff = cv::sum(last_frame - frame);
+      if (std::accumulate(diff.val, diff.val + 4, 0.0) == 0.0) {
+        std::cerr << "Camera " << number << " seems to have crashed." << std::endl;
+        return false;
+      }
+    }
+    last_frame = frame.clone();
 
     const auto time =  std::chrono::duration_cast <std::chrono::microseconds> (
       std::chrono::high_resolution_clock::now().time_since_epoch()) - base_time;
@@ -231,19 +189,27 @@ private:
     optional_camera_data new_data(new camera_data {
       time,
       number,
-      std::move(frame),
+      frame,
     });
 
     if (!processor.enqueue(new_data, false)) {
       std::cerr << "Unable to queue " << number << " sample: " << *new_data << std::endl;
+      if (processor.is_terminated()) {
+        std::cerr << "Frame processor has stopped." << std::endl;
+        return false;
+      }
     }
+
     return true;
   }
 
-  frame_dumper                     frames;
+  cv::Mat          last_frame;
+  cv::VideoCapture capture;
+
   const std::chrono::microseconds  base_time;
   const int                        number;
   camera_data_processor           &processor;
+
 };
 
 class frame_processor {
@@ -251,7 +217,7 @@ public:
   frame_processor(const std::string &name) :
   base_time(std::chrono::duration_cast <std::chrono::microseconds> (
     std::chrono::high_resolution_clock::now().time_since_epoch())),
-  my_name(name), processor(my_name) {}
+  my_name(name), processor(timer, my_name) {}
 
   void start() {
     // NOTE: One or both of these should catch a repeated call to start.
@@ -357,7 +323,7 @@ int main(int argc, char *argv[]) {
     }
   }
 
-    monitor.create_camera(number, lambda, width, height);
+  monitor.create_camera(number, lambda, width, height);
 
   monitor.start();
   monitor.wait_empty();

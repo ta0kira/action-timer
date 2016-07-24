@@ -51,8 +51,13 @@ either expressed or implied, of the FreeBSD Project.
 #include "category-tree.hpp"
 #include "timer.hpp"
 
+struct abstract_scaled_timer {
+  virtual void   set_scale(double scale) = 0;
+  virtual double get_scale()             = 0;
+};
+
 template <class Category>
-class action_timer {
+class action_timer : public abstract_scaled_timer {
 public:
   typedef std::unique_ptr <abstract_action> generic_action;
 
