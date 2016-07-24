@@ -44,7 +44,7 @@ target_link_libraries(poisson-queue-test pthread)
 
 
 find_package(GTest)
-if(GTEST_LIBRARY)
+if(GTEST_LIBRARIES)
 
   include_directories(${GTEST_INCLUDE_DIRS})
 
@@ -52,5 +52,20 @@ if(GTEST_LIBRARY)
     category-tree-test
     test/category-tree-test.cpp)
   target_link_libraries(category-tree-test ${GTEST_LIBRARIES} pthread)
+
+endif()
+
+
+
+find_package(OpenCV)
+if (OpenCV_LIBS)
+
+  add_executable(
+    motion-capture
+    example/motion-capture.cpp
+    src/action.cpp
+    src/timer.cpp
+    common/locking-container.cpp)
+  target_link_libraries(motion-capture pthread ${OpenCV_LIBS})
 
 endif()

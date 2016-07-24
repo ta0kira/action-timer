@@ -110,6 +110,9 @@ public:
   // Block until is_stopping is true.
   void wait_stopping();
 
+  bool is_empty();
+  void wait_empty();
+
   // NOTE: This is non-deterministic, since it waits for the threads to reach an
   // exit point, e.g., after the ongoing sleep. Sleeps are subdivided to allow
   // for finer-grained cancelation, however. (See precise_timer.)
@@ -195,6 +198,10 @@ void action_timer <Category> ::erase_timer(const Category &category) {
   auto category_write = locked_categories.get_write_auth(auth);
   assert(category_write);
   category_write->erase_category(category);
+  // Make sure that no thread gets stuck between locking state_lock and waiting
+  // for state_wait.
+  std::unique_lock <std::mutex> local_lock(state_lock);
+  state_wait.notify_all();
 }
 
 template <class Category>
@@ -289,6 +296,29 @@ void action_timer <Category> ::wait_stopping() {
   while (!this->is_stopping()) {
     std::unique_lock <std::mutex> local_lock(state_lock);
     state_wait.wait(local_lock);
+  }
+}
+
+template <class Category>
+bool action_timer <Category> ::is_empty() {
+  auto category_read = locked_categories.get_read();
+  assert(category_read);
+  return category_read->get_total_size() == 0.0;
+}
+
+template <class Category>
+void action_timer <Category> ::wait_empty() {
+  while (!this->is_stopping()) {
+    std::unique_lock <std::mutex> local_lock(state_lock);
+    auto category_read = locked_categories.get_read();
+    assert(category_read);
+    if (category_read->get_total_size() != 0.0) {
+      category_read.clear();
+      state_wait.wait(local_lock);
+      continue;
+    } else {
+      break;
+    }
   }
 }
 
