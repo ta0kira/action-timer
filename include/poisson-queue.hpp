@@ -65,7 +65,7 @@ public:
 
   // The action doesn't use queue data.
   void set_action(const Category &category,
-                  typename action_timer <Category> ::generic_action action,
+                  typename abstract_scaled_timer::generic_action action,
                   double lambda);
 
   // The action uses queue data.
@@ -118,7 +118,7 @@ bool poisson_queue <Category, Type> ::empty() {
 
 template <class Category, class Type>
 void poisson_queue <Category, Type> ::set_action(const Category &category,
-                                                 typename action_timer <Category> ::generic_action action,
+                                                 typename abstract_scaled_timer::generic_action action,
                                                  double lambda) {
   actions.set_action(category, std::move(action));
   actions.set_timer(category, lambda);
@@ -136,7 +136,7 @@ void poisson_queue <Category, Type> ::set_processor(const Category &category,
     new queue_processor <Type> (std::move(process_function), capacity));
   processor->start();
   auto *const processor_ptr = processor.get();
-  action_timer <std::string> ::generic_action action(
+  abstract_scaled_timer::generic_action action(
     new sync_action([this,processor_ptr] {
                       auto write_queue = locked_queue.get_write();
                       assert(write_queue);

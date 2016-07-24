@@ -19,7 +19,7 @@ int main() {
   // dies. This isn't automatically started by poisson_queue for numerous
   // reasons, the main one being that there is no logical way to determine what
   // the category label should be.
-  action_timer <std::string> ::generic_action zombie_action(new async_action([&queue] {
+  abstract_scaled_timer::generic_action zombie_action(new async_action([&queue] {
     queue.zombie_cleanup();
     return true;
   }));

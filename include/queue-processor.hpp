@@ -87,6 +87,7 @@ public:
   bool is_terminated() const;
 
   bool enqueue(Type &added, bool block = false);
+  // DEPRECATED
   bool transfer_next_item(queue_type &from_queue, bool block = false);
   void recover_lost_items(queue_type &to_queue);
 

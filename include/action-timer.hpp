@@ -52,6 +52,7 @@ either expressed or implied, of the FreeBSD Project.
 #include "timer.hpp"
 
 struct abstract_scaled_timer {
+  typedef std::unique_ptr <abstract_action> generic_action;
   virtual void   set_scale(double scale) = 0;
   virtual double get_scale()             = 0;
 };
@@ -59,8 +60,6 @@ struct abstract_scaled_timer {
 template <class Category>
 class action_timer : public abstract_scaled_timer {
 public:
-  typedef std::unique_ptr <abstract_action> generic_action;
-
   // The number of threads is primarily intended for making timing more accurate
   // when high lambda values are used. When n threads are used, all sleeps are
   // multiplied by n, which decreases the ratio of overhead to actual sleeping

@@ -193,7 +193,7 @@ int main() {
   timer.set_category('A', 10.0);
 
   // sync_action causes the timer to block while the action is being executed.
-  action_timer <char> ::generic_action A_action(new sync_action(
+  abstract_scaled_timer::generic_action A_action(new sync_action(
     [] {
       std::cout << "Executing A." << std::endl;
       return true;
@@ -208,7 +208,7 @@ int main() {
   // async_action *doesn't* cause the timer to block. This is helpful for long-
   // running actions, and for actions that are going to change the state of the
   // action_timer.
-  action_timer <char> ::generic_action B_action(new async_action(
+  abstract_scaled_timer::generic_action B_action(new async_action(
     [&timer] {
       std::cout << "B is stopping the timer." << std::endl;
       timer.async_stop();
@@ -223,7 +223,7 @@ int main() {
 
   // Returning false will cause the action_timer to remove the action. This has
   // no effect on the other actions that are still registered.
-  action_timer <char> ::generic_action C_action(new sync_action(
+  abstract_scaled_timer::generic_action C_action(new sync_action(
     [&timer] {
       std::cout << "C has failed." << std::endl;
       return false;
@@ -287,7 +287,7 @@ int main() {
   // dies. This isn't automatically started by poisson_queue for numerous
   // reasons, the main one being that there is no logical way to determine what
   // the category label should be.
-  action_timer <std::string> ::generic_action zombie_action(new async_action([&queue] {
+  abstract_scaled_timer::generic_action zombie_action(new async_action([&queue] {
     queue.zombie_cleanup();
     return true;
   }));

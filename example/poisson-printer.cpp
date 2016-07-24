@@ -140,7 +140,7 @@ int main(int argc, char *argv[]) {
     }
     if (lambda > 0.0) {
       actions.set_timer(category, lambda);
-      action_timer <std::string> ::generic_action action(
+      abstract_scaled_timer::generic_action action(
         new async_action([text] {
           print_action(text);
           return true;

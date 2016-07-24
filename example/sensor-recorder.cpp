@@ -125,7 +125,7 @@ public:
     timer.start();
     processor.start();
 
-    action_timer <std::string> ::generic_action new_action(
+    abstract_scaled_timer::generic_action new_action(
       new async_action([this] { return this->check_sensors(); }));
     timer.set_action(my_name, std::move(new_action));
     timer.set_timer(my_name, 1.0);
@@ -196,7 +196,7 @@ private:
     }
 
     std::cerr << "Starting sensor " << category << "." << std::endl;
-    action_timer <std::string> ::generic_action sensor(new sensor_reader(category, processor, base_time));
+    abstract_scaled_timer::generic_action sensor(new sensor_reader(category, processor, base_time));
     timer.set_timer(category, lambda);
     timer.set_action(category, std::move(sensor));
     return true;
