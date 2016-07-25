@@ -74,9 +74,7 @@ public:
                 const std::string &output_filename = "") :
   recording(false), terminated(false), filename(output_filename),
   number(new_number), width(new_width), height(new_height), window(new_window),
-  blank_image(cv::Mat::zeros(height, width, CV_8UC3)),
-  base_time(std::chrono::duration_cast <std::chrono::microseconds> (
-    std::chrono::high_resolution_clock::now().time_since_epoch())) {}
+  blank_image(cv::Mat::zeros(height, width, CV_8UC3)) {}
 
   void start() {
     assert(!thread);
@@ -221,6 +219,8 @@ private:
   }
 
   void capture_thread() {
+    base_time = std::chrono::duration_cast <std::chrono::microseconds> (
+      std::chrono::high_resolution_clock::now().time_since_epoch());
     while (!terminated) {
       {
         std::unique_lock <std::mutex> local_lock(record_lock);
@@ -277,17 +277,17 @@ private:
   cv::VideoWriter  writer;
   lc::locking_container <optional_camera_data, lc::rw_lock> last_frame;
 
-  const std::string               filename;
-  const int                       number, width, height;
-  const std::string               window;
-  const cv::Mat                   blank_image;
-  const std::chrono::microseconds base_time;
+  const std::string         filename;
+  const int                 number, width, height;
+  const std::string         window;
+  const cv::Mat             blank_image;
+  std::chrono::microseconds base_time;
 };
 
 class motion_detector : public queue_processor_base <optional_camera_data> {
 public:
   motion_detector(camera_reader &new_reader) :
-  last_frame_changed(false), reader(new_reader) {}
+  last_frame_recorded(false), reader(new_reader) {}
 
 private:
   bool process(optional_camera_data &data) override {
@@ -307,49 +307,50 @@ private:
 
   cv::Mat preprocess(const cv::Mat &orig_frame) const {
     cv::Mat frame = orig_frame, frame_temp;
-    cv::cvtColor(frame, frame_temp, CV_BGR2GRAY);
-    frame = frame_temp;
     cv::normalize(frame, frame_temp, 0, 255, cv::NORM_MINMAX);
     frame = frame_temp;
+    cv::cvtColor(frame, frame_temp, CV_BGR2GRAY);
+    frame = frame_temp;
     cv::blur(frame, frame_temp, cv::Size(10, 10));
-    return frame_temp;
+    frame = frame_temp;
+    return frame;
   }
 
   cv::Mat diff_since_last(const cv::Mat &orig_frame) const {
-    cv::Mat frame = orig_frame - last_frame, frame_temp;
+    cv::Mat frame = (orig_frame - last_frame) + (last_frame - orig_frame), frame_temp;
     cv::Canny(frame, frame_temp, 1.0, 75.0);
     frame = frame_temp;
-    cv::blur(frame, frame_temp, cv::Size(10, 10));
+    cv::cvtColor(frame, frame_temp, CV_GRAY2BGR);
     frame = frame_temp;
-    cv::normalize(frame, frame_temp, 0, 255, cv::NORM_MINMAX);
-    cv::cvtColor(frame_temp, frame, CV_GRAY2BGR);
     return frame;
   }
 
   void check_for_motion(const cv::Mat &orig_frame, const optional_camera_data &data) {
-    cv::Mat frame = orig_frame.clone(), frame_temp;
-    const bool this_frame_changed = cv::norm(frame) / (frame.rows * frame.cols) > 0.000001;
+    cv::Mat frame = orig_frame.clone();
+    const bool this_frame_changed = cv::norm(frame) / (frame.rows * frame.cols) > 0.0001;
+    bool this_frame_recorded = false;
     if (this_frame_changed) {
       last_changed_time = data->time;
-    }
-    // Keep showing frames for 10s after the last detected motion.
-    if (this_frame_changed || (data->time - last_changed_time).count() / 1000000.0 < 10.0) {
-      if (this_frame_changed && !last_frame_changed) {
-        std::cerr << "Change detected in " << *data << "." << std::endl;
-        last_frame_changed = true;
-        reader.start_recording();
-      }
+      this_frame_recorded = true;
     } else {
-      // Just show the differences.
-      if (!this_frame_changed && last_frame_changed) {
-        std::cerr << "No change detected in " << *data << "." << std::endl;
-        last_frame_changed = false;
-        reader.stop_recording();
-      }
+      // Check last_frame_recorded to make sure recording was already happening;
+      // otherwise, we might start recording purely based on time, e.g., as soon
+      // as the motion_detector is started.
+      this_frame_recorded = last_frame_recorded &&
+        (data->time - last_changed_time).count() / 1000000.0 < 10.0;
     }
+    if (this_frame_recorded && !last_frame_recorded) {
+      std::cerr << "Change detected in " << *data << "." << std::endl;
+      reader.start_recording();
+    }
+    if (!this_frame_recorded && last_frame_recorded) {
+      std::cerr << "No change detected in " << *data << "." << std::endl;
+      reader.stop_recording();
+    }
+    last_frame_recorded = this_frame_recorded;
   }
 
-  bool                       last_frame_changed;
+  bool                       last_frame_recorded;
   std::chrono::microseconds  last_changed_time;
   cv::Mat                    last_frame;
   camera_reader             &reader;
