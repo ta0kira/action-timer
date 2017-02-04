@@ -1,5 +1,5 @@
 /* -----------------------------------------------------------------------------
-Copyright (c) 2016, Google Inc.
+Copyright (c) 2016-2017, Google Inc.
 All rights reserved.
 
 Redistribution and use in source and binary forms, with or without
@@ -81,6 +81,7 @@ private:
 
 #ifdef TESTING
   FRIEND_TEST(category_tree_test, integration_test);
+  FRIEND_TEST(category_tree_test, zero_size_test);
 #endif
 };
 
@@ -130,6 +131,8 @@ public:
     // NOTE: Checking high_child prevents problems below if there is a precision
     // error that makes check_size >= size.
     if (!high_child || check_size < size) {
+      // If this category has zero size, the search should never get here.
+      assert(size != Size());
       return category;
     }
     // Not in second part => move to third.
@@ -286,10 +289,11 @@ private:
     assert(!removed);
     if (current) {
       if (!current->low_child) {
-        optional_node discard;
-        discard.swap(current->high_child);
-        discard.swap(current);
-        removed.swap(discard);
+        optional_node temp;
+        temp.swap(current->high_child);
+        temp.swap(current);
+        removed.swap(temp);
+        assert(!temp);
       } else {
         remove_lowest_node(current->low_child, removed);
         update_and_rebalance(current);
@@ -301,10 +305,11 @@ private:
     assert(!removed);
     if (current) {
       if (!current->high_child) {
-        optional_node discard;
-        discard.swap(current->low_child);
-        discard.swap(current);
-        removed.swap(discard);
+        optional_node temp;
+        temp.swap(current->low_child);
+        temp.swap(current);
+        removed.swap(temp);
+        assert(!temp);
       } else {
         remove_highest_node(current->high_child, removed);
         update_and_rebalance(current);
@@ -353,6 +358,7 @@ private:
   FRIEND_TEST(category_node_test, test_pivot_high_no_recursion_2_1);
   FRIEND_TEST(category_node_test, test_pivot_high_low_recursion_2_1);
   FRIEND_TEST(category_tree_test, integration_test);
+  FRIEND_TEST(category_tree_test, zero_size_test);
 
   friend class node_printer;
 

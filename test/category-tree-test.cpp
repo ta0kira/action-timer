@@ -1,5 +1,5 @@
 /* -----------------------------------------------------------------------------
-Copyright (c) 2016, Google Inc.
+Copyright (c) 2016-2017, Google Inc.
 All rights reserved.
 
 Redistribution and use in source and binary forms, with or without
@@ -644,7 +644,7 @@ TEST(category_tree_test, integration_test) {
     EXPECT_TRUE(tree.category_exists(i));
   }
   for (int i = 0; i < element_count; ++i) {
-    const int adjusted = ((i + 13) * 19) % element_count;
+    const int adjusted = ((i + 7) * 19) % element_count;
     EXPECT_TRUE(tree.category_exists(adjusted));
     tree.erase_category(adjusted);
     EXPECT_EQ(2 * (element_count - (i + 1)), tree.get_total_size());
@@ -661,6 +661,23 @@ TEST(category_tree_test, integration_test) {
   }
   EXPECT_EQ(0, tree.get_total_size());
   EXPECT_EQ(nullptr, tree.root);
+}
+
+TEST(category_tree_test, zero_size_test) {
+  category_tree <int> tree;
+  const int element_count = (1 << 8) + (1 << 7);
+  const int nonzero_rate = 7;
+  for (int i = 0; i < element_count; ++i) {
+    const int adjusted = ((i + 19) * 13) % element_count;
+    tree.update_category(adjusted, adjusted % nonzero_rate ? 0 : 1);
+    // (Yes, this makes it quadratic...)
+    EXPECT_TRUE(tree.root->validate_balanced());
+    EXPECT_TRUE(tree.root->validate_sorted());
+    EXPECT_TRUE(tree.root->validate_sized());
+  }
+  for (int i = 0; i < tree.get_total_size(); ++i) {
+    EXPECT_EQ(nonzero_rate * i, tree.locate(i));
+  }
 }
 
 int main(int argc, char *argv[]) {
